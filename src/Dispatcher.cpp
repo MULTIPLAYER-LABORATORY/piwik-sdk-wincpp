@@ -11,18 +11,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define _WIN32_WINNT 0x0501
-#include <windows.h>
-#include <winhttp.h>
-#include <tchar.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <process.h>
-#include <string>
-#include <sstream>
-#include <deque>
-
+#include "Config.h"
 #include "Utilities.h"
 #include "Dispatcher.h"
 
@@ -44,9 +33,10 @@ PiwikDispatcher::~PiwikDispatcher ()
 		StopService ();
 }
 
-void PiwikDispatcher::SetLogger (wostream* s)
+void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
 {
 	Logger.SetStream (s);
+	Logger.SetLevel (lvl);
 }
 
 bool PiwikDispatcher::CurrentApiUrl (TSTRING& str)  
@@ -63,14 +53,16 @@ void PiwikDispatcher::SetApiUrl (LPCTSTR p)
 	PiwikScopedLock lck (Mutex);
 	
 	TSTRING url = p; 
-	MakeAbsoluteUrl (url);
+	int i = url.find (_T("://"));
+	if (i != TSTRING::npos)
+		url = url.substr (i + 3);
 	if (url.find (_T("piwik.php")) != TSTRING::npos || url.find (_T("piwik-proxy.php")) != TSTRING::npos)
 		ApiUrl = url;
 	else
 		ComposeUrl (url, (ApiUrl = _T("piwik.php")));
 
 	wstring aux;
-	size_t j = ApiUrl.find ('/', ApiUrl.find (_T("://") + 3));
+	int j = ApiUrl.find ('/');
 	ApiHost = WIDE_STRING (ApiUrl.substr (0, j), aux);
 	ApiPath = WIDE_STRING (ApiUrl.substr (j), aux);
 }
@@ -180,9 +172,9 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 				dsp->SendRequest (PIWIK_METHOD_GET, itm);
 			else
 			{
-				msg += (cnt == 0 ? "requests:[" : ",[") + itm + "]";
+				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" QUOTES : ",[" QUOTES) + itm + QUOTES "]";
 				if (cnt >= PIWIK_DISPATCH_BUNDLE || ! avl)
-					if (dsp->SendRequest (PIWIK_METHOD_POST, msg))
+					if (dsp->SendRequest (PIWIK_METHOD_POST, msg + "}"))
 						cnt = 0, msg.clear ();
 			}
 		}
@@ -204,7 +196,7 @@ bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
 
 	if (DryRun)
 	{
-		Logger.Log (ApiHost + ApiPath + ToUWide (msg, aux));
+		Logger.Log (L"DRYRUN - Host: " + ApiHost + L" Path: " + ApiPath + L" Query: " + ToUWide (msg, aux) + L"\n");
 		return true;
 	}
 
@@ -228,7 +220,7 @@ bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
 										WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
 		if (Request)
 		{
-			rsl = ::WinHttpSendRequest (Request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, data, size, size, 0);
+			rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
 			if (rsl)
 				rsl = ::WinHttpReceiveResponse (Request, 0);
 		}
@@ -239,5 +231,5 @@ bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
 	if (Connection)
 		::WinHttpCloseHandle (Connection);
 	
-	return (rsl != 0);
+	return (rsl == TRUE);
 }

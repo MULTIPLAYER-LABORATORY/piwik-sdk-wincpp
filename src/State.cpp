@@ -11,20 +11,12 @@
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define _WIN32_WINNT 0x0501
-#include <windows.h>
-#include <tchar.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string>
-#include <sstream>
-
+#include "Config.h"
 #include "Utilities.h"
 #include "QueryParams.h"
 #include "State.h"
 
-// Serialization
+// Serialization of a tracking snapshot associating its values to the Piwik request parameters
 
 string& PiwikState::Serialize (string& qry)
 {

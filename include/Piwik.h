@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // File:         Piwik.h
-// Description:  Definition of the SDK interface
+// Description:  Definition file to be included by client applications using the SDK
 // Project:      Piwik-SDK-Win-C++
 // Version:      1.0
 // Date:         2016-09-19
@@ -13,5 +13,10 @@
 
 #pragma once
 
-using namespace std;
+#include "../src/Config.h"
+#include "../src/Utilities.h"
+#include "../src/Dispatcher.h"
+#include "../src/State.h"
+#include "../src/Client.h"
+
 

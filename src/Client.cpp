@@ -11,19 +11,8 @@
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define _WIN32_WINNT 0x0501
-#include <windows.h>
-#include <winhttp.h>
-#include <tchar.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string>
-#include <sstream>
-#include <deque>
-
+#include "Config.h"
 #include "Utilities.h"
-#include "QueryParams.h"
 #include "Dispatcher.h"
 #include "State.h"
 #include "Client.h"
@@ -42,10 +31,11 @@ PiwikClient::PiwikClient (LPCTSTR url, int id)
 	srand ((int) time (0));
 }
 
-void PiwikClient::SetLogger (wostream* s)
+void PiwikClient::SetLogger (wostream* s, PiwikLogLevel lvl)
 {
 	Logger.SetStream (s);
-	Dispatcher.SetLogger (s);
+	Logger.SetLevel (lvl);
+	Dispatcher.SetLogger (s, lvl);
 }
 
 int PiwikClient::CurrentSiteId ()                
@@ -274,13 +264,13 @@ bool PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR 
 	if (nam1 && val1)
 		st.ScreenVariables.Items[0].Set (nam1, val1);
 	if (nam2 && val2)
-		st.ScreenVariables.Items[1].Set (nam1, val1);
+		st.ScreenVariables.Items[1].Set (nam2, val2);
 	if (nam3 && val3)
-		st.ScreenVariables.Items[2].Set (nam1, val1);
+		st.ScreenVariables.Items[2].Set (nam3, val3);
 	if (nam4 && val4)
-		st.ScreenVariables.Items[3].Set (nam1, val1);
+		st.ScreenVariables.Items[3].Set (nam4, val4);
 	if (nam5 && val5)
-		st.ScreenVariables.Items[4].Set (nam1, val1);
+		st.ScreenVariables.Items[4].Set (nam5, val5);
 
 	return Track (st);
 }

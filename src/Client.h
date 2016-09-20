@@ -13,6 +13,14 @@
 
 #pragma once
 
+#include <windows.h>
+#include <tchar.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string>
+#include <ostream>
+
 using namespace std;
 
 class PiwikClient
@@ -35,7 +43,7 @@ private:
 	PiwikClient (LPCTSTR url, int id = 0);
 	
 public:
-	void SetLogger (wostream* s);
+	void SetLogger (wostream* s, PiwikLogLevel lvl = PIWIK_INITIAL_LOG_LEVEL);
 	int  CurrentSiteId ();
 	void SetSiteId (int v);
 	bool CurrentUserId (TSTRING& str);

@@ -13,22 +13,15 @@
 
 #pragma once
 
+#include <windows.h>
+#include <tchar.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string>
+#include <sstream>
+#include <ostream>
+
 using namespace std;
-
-// Symbols
-
-#define PIWIK_LOG_PREFIX           _T("PIWIK:")
-#define PIWIK_API_VERSION          1
-#define PIWIK_BASIC_METHOD         PIWIK_METHOD_POST
-#define PIWIK_USER_AGENT           _T("Piwik Client Windows Desktop")
-#define PIWIK_RECORDING_VALUE      1
-#define PIWIK_SEND_IMAGE           0
-#define PIWIK_CUSTOM_VARIABLES     5
-#define PIWIK_VARIABLE_LENGTH      200
-#define PIWIK_SESSION_TIMEOUT      30   // sec before restarting a client session
-#define PIWIK_CONNECTION_TIMEOUT   5    // sec while trying to establish a connection
-#define PIWIK_DISPATCH_INTERVAL    120  // sec between API requests
-#define PIWIK_DISPATCH_BUNDLE      20   // number of queries sent together in one request
 
 // Macros
 
@@ -58,6 +51,13 @@ enum PiwikMethod
 	PIWIK_METHOD_POST
 };
 
+enum PiwikLogLevel
+{
+	PIWIK_LOG_DEBUG,
+	PIWIK_LOG_INFO,
+	PIWIK_LOG_ERROR
+};
+
 // Objects
 
 struct PiwikVariable
@@ -65,7 +65,8 @@ struct PiwikVariable
 	TSTRING Name;
 	TSTRING Value;
 
-	void Set (LPCTSTR nam, LPCTSTR val)   { Name.assign (nam, PIWIK_VARIABLE_LENGTH); Value.assign (val, PIWIK_VARIABLE_LENGTH); }
+	void Set (LPCTSTR nam, LPCTSTR val)   { Name = nam; if (Name.length () > PIWIK_VARIABLE_LENGTH) Name = Name.substr (0, PIWIK_VARIABLE_LENGTH);
+	                                        Value = val; if (Value.length () > PIWIK_VARIABLE_LENGTH) Value = Value.substr (0, PIWIK_VARIABLE_LENGTH); }
 	bool IsValid ()                       { return (! Name.empty () && ! Value.empty ()); }
 };
 
@@ -120,12 +121,17 @@ class PiwikLogger
 {
 private:
 	wostream* Stream;
+	PiwikLogLevel Level;
 
 public:
-	PiwikLogger ()                { Stream = 0; }
-	void SetStream (wostream* s)  { Stream = s; }
-	void Log (wstring& str)       { if (Stream) Stream->write (str.data (), str.length ()); }
-	bool IsValid ()               { return (Stream != 0); }
+	PiwikLogger ()                      { Stream = 0; Level = PIWIK_INITIAL_LOG_LEVEL; }
+	void SetStream (wostream* s)        { Stream = s; }
+	void SetLevel (PiwikLogLevel lvl)   { Level = lvl; }
+	void Log (wstring& msg)             { if (Stream) Stream->write (msg.data (), msg.length ()); }
+	void Debug (wstring& msg)           { if (Level >= PIWIK_LOG_DEBUG) Log (msg); }
+	void Info (wstring& msg)            { if (Level >= PIWIK_LOG_INFO) Log (msg); }
+	void Error (wstring& msg)           { if (Level >= PIWIK_LOG_ERROR) Log (msg); }
+	bool IsValid ()                     { return (Stream != 0); }
 };
 
 // Helpers

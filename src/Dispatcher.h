@@ -13,6 +13,16 @@
 
 #pragma once
 
+#include <windows.h>
+#include <winhttp.h>
+#include <tchar.h>
+#include <stdlib.h>
+#include <time.h>
+#include <process.h>
+#include <string>
+#include <deque>
+#include <ostream>
+
 using namespace std;
 
 class PiwikDispatcher
@@ -38,7 +48,7 @@ public:
 	PiwikDispatcher ();
 	~PiwikDispatcher ();
 
-	void SetLogger (wostream* s);
+	void SetLogger (wostream* s, PiwikLogLevel lvl);
 	bool CurrentApiUrl (TSTRING& str);
 	void SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();

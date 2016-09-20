@@ -11,16 +11,7 @@
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define _WIN32_WINNT 0x0501
-#include <windows.h>
-#include <tchar.h>
-#include <wincrypt.h>
-#include <stdio.h>
-#include <cctype>
-#include <string>
-#include <sstream>
-#include <deque>
-
+#include "Config.h"
 #include "Utilities.h"
 
 // PiwikVariableSet
@@ -86,9 +77,13 @@ void PiwikQueryBuilder::AddParameter (LPCSTR nam, PiwikVariableSet& val)
 
 	*this << prefix () << nam << "={";
 	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+	{
 		if (val.Items[i].IsValid ())
-			*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Name, s1), s2) << 
-			         QUOTES << "," << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Value, s1), s2) << QUOTES << "]";
+		{
+			*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Name, s1), s2);
+			*this << QUOTES << "," << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Value, s1), s2) << QUOTES << "]";
+		}
+	}
 	*this << "}";
 	items++;
 }
@@ -245,7 +240,7 @@ bool GetScreenResolution (TSTRING& str)
 
 bool IsAbsoluteUrl (TSTRING& url)
 {
-	return (url.compare (0, 7, _T("http://")) == 0 || url.compare (0, 8, _T("https://")) == 0 || url.compare (0, 6, _T("ftp://")) == 0);
+	return (url.find (_T("://")) != TSTRING::npos);
 }
 
 void MakeAbsoluteUrl (TSTRING& url)
