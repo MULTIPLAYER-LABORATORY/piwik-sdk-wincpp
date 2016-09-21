@@ -26,8 +26,6 @@ using namespace std;
 class PiwikClient
 {
 private:
-	PiwikBasicState State;
-	PiwikLogger Logger;
 	TSTRING Application;
 	TSTRING Location;
 	time_t SessionStart;
@@ -35,21 +33,20 @@ private:
 	bool Persistent;
 	bool Disabled;
 
-protected:	
+	PiwikBasicState State;
 	PiwikDispatcher Dispatcher;
 	PiwikLock Mutex;
-	
-private:
-	PiwikClient (LPCTSTR url, int id = 0);
+	PiwikLogger Logger;
 	
 public:
-	void SetLogger (wostream* s, PiwikLogLevel lvl = PIWIK_INITIAL_LOG_LEVEL);
+	PiwikClient (LPCTSTR url, int id = 0);
+	
 	int  CurrentSiteId ();
-	void SetSiteId (int v);
+	void SetSiteId (int id);
 	bool CurrentUserId (TSTRING& str);
 	void SetUserId (LPCTSTR p);
 	bool CurrentApiUrl (TSTRING& str);
-	void SetApiUrl (LPCTSTR p);
+	bool SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();
 	void SetRequestMethod (PiwikMethod m);
 	bool UsesSecureConnection ();
@@ -73,6 +70,7 @@ public:
 	void SetDisabled (bool v);
 	bool IsDryRun ();
 	void SetDryRun (bool v);
+	void SetLogger (wostream* s, PiwikLogLevel lvl = PIWIK_INITIAL_LOG_LEVEL);
 
 	bool TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0);
 	bool TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
@@ -81,8 +79,7 @@ public:
 	bool TrackOutLink (LPCTSTR path);
 	bool TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target);
 	bool TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action);
+
 	bool Track (PiwikState& st);
 	bool Flush ();
-	
-	static PiwikClient* NewTracker (LPCTSTR url, int id = 0);
 };

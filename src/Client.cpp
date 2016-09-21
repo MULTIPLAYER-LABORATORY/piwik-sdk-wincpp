@@ -13,8 +13,8 @@
 
 #include "Config.h"
 #include "Utilities.h"
-#include "Dispatcher.h"
 #include "State.h"
+#include "Dispatcher.h"
 #include "Client.h"
 
 // Configuration
@@ -31,21 +31,14 @@ PiwikClient::PiwikClient (LPCTSTR url, int id)
 	srand ((int) time (0));
 }
 
-void PiwikClient::SetLogger (wostream* s, PiwikLogLevel lvl)
-{
-	Logger.SetStream (s);
-	Logger.SetLevel (lvl);
-	Dispatcher.SetLogger (s, lvl);
-}
-
 int PiwikClient::CurrentSiteId ()                
 { 
 	return State.SiteId; 
 }
 
-void PiwikClient::SetSiteId (int v)
+void PiwikClient::SetSiteId (int id)
 { 
-	State.SiteId = v; 
+	State.SiteId = id; 
 }
 
 bool PiwikClient::CurrentUserId (TSTRING& str)
@@ -70,9 +63,9 @@ bool PiwikClient::CurrentApiUrl (TSTRING& str)
 	return Dispatcher.CurrentApiUrl (str);
 }
 
-void PiwikClient::SetApiUrl (LPCTSTR p)      
+bool PiwikClient::SetApiUrl (LPCTSTR p)      
 { 
-	Dispatcher.SetApiUrl (p);
+	return Dispatcher.SetApiUrl (p);
 }
 
 int PiwikClient::CurrentRequestMethod ()
@@ -127,7 +120,7 @@ void PiwikClient::SetLanguage (LPCTSTR p)
 	State.Language = p; 
 }
 
-// Index if omitted will be determined by looking up a variable with the same name
+// Index if omitted will be determined by looking up a variable with the same name in the current set
 
 void PiwikClient::SetUserVariable (LPCTSTR nam, LPCTSTR val, int ind)
 {
@@ -169,7 +162,6 @@ void PiwikClient::SetLocation (LPCTSTR p)
 	PiwikScopedLock lck (Mutex);
 	
 	Location = p; 
-	MakeAbsoluteUrl (Location);
 }
 
 bool PiwikClient::SetSessionTimeout (int t)
@@ -226,6 +218,13 @@ bool PiwikClient::IsDryRun ()
 void PiwikClient::SetDryRun (bool v)              
 { 
 	Dispatcher.SetDryRun (v); 
+}
+
+void PiwikClient::SetLogger (wostream* s, PiwikLogLevel lvl)
+{
+	Logger.SetStream (s);
+	Logger.SetLevel (lvl);
+	Dispatcher.SetLogger (s, lvl);
 }
 
 // Tracking
@@ -338,12 +337,10 @@ bool PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece
 bool PiwikClient::Track (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
-	string qry;
-	time_t t;
 
 	if (! Disabled && State.SiteId && ! st.TrackedPath.empty ())
 	{
-		t = time (0);
+		time_t t = time (0);
 		if (t - SessionStart > SessionTimeout)
 		{
 			st.NewSession = 1;
@@ -365,7 +362,7 @@ bool PiwikClient::Track (PiwikState& st)
 			SessionStart = t;
 		}
 
-		if (! IsAbsoluteUrl (st.TrackedPath))
+		if (st.TrackedPath.find (':') == TSTRING::npos)
 			ComposeUrl (Location, st.TrackedPath);
 
 		st.SiteId = State.SiteId;
@@ -377,7 +374,7 @@ bool PiwikClient::Track (PiwikState& st)
 		st.ReturnImage = State.ReturnImage;
 		st.Random = rand ();
 
-		return Dispatcher.Submit (st.Serialize (qry)); 
+		return Dispatcher.Submit (st); 
 	}
 
 	return false;
@@ -388,12 +385,3 @@ bool PiwikClient::Flush ()
 	return (! Disabled && Dispatcher.Flush ());
 }
 
-// Statics
-
-PiwikClient* PiwikClient::NewTracker (LPCTSTR url, int id)       
-{
-	if (url)
-		return new PiwikClient (url, id); 
-	
-	return 0; 
-}

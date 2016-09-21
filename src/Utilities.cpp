@@ -42,52 +42,6 @@ bool PiwikVariableSet::IsValid ()
 	return false; 
 }
 
-// PiwikQueryBuilder
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, int val)
-{
-	*this << prefix () << nam << "=" << val;
-	items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, float val)
-{
-	*this << prefix () << nam << "=" << val;
-	items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, time_t val)
-{
-	*this << prefix () << nam << "=" << val;
-	items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, TSTRING& val)
-{
-	string s1, s2;
-	
-	*this << prefix () << nam << "=" << PercentEncode (UTF8_STRING (val, s1), s2);
-	items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, PiwikVariableSet& val)
-{
-	string s1, s2;
-	int n = 0;
-
-	*this << prefix () << nam << "={";
-	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
-	{
-		if (val.Items[i].IsValid ())
-		{
-			*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Name, s1), s2);
-			*this << QUOTES << "," << QUOTES << PercentEncode (UTF8_STRING (val.Items[i].Value, s1), s2) << QUOTES << "]";
-		}
-	}
-	*this << "}";
-	items++;
-}
-
 // Helpers
 
 string& ToUTF8 (wstring& src, string& trg)
@@ -114,7 +68,7 @@ string& ToUTF8 (wstring& src, string& trg)
 	return trg;
 }
 
-wstring& ToUWide (string& src, wstring& trg)
+wstring& ToWide (string& src, wstring& trg)
 {
 	wchar_t* bfr;
 	int cnt;
@@ -238,17 +192,6 @@ bool GetScreenResolution (TSTRING& str)
 	return false;
 }
 
-bool IsAbsoluteUrl (TSTRING& url)
-{
-	return (url.find (_T("://")) != TSTRING::npos);
-}
-
-void MakeAbsoluteUrl (TSTRING& url)
-{
-	if (! IsAbsoluteUrl (url))
-		url = _T("http://") + url;
-}
-
 bool ComposeUrl (TSTRING& prf, TSTRING& url)
 {
 	int n = prf.length ();
@@ -257,7 +200,6 @@ bool ComposeUrl (TSTRING& prf, TSTRING& url)
 	url = prf + url;
 	return ! url.empty ();
 }
-
 
 _int64 ReadRegistryValue (LPCTSTR apl, LPCTSTR usr, LPCTSTR name)
 {

@@ -13,6 +13,7 @@
 
 #include "Config.h"
 #include "Utilities.h"
+#include "State.h"
 #include "Dispatcher.h"
 
 // Configuration
@@ -48,14 +49,18 @@ bool PiwikDispatcher::CurrentApiUrl (TSTRING& str)
 	return ! str.empty (); 
 }
 
-void PiwikDispatcher::SetApiUrl (LPCTSTR p)      
+bool PiwikDispatcher::SetApiUrl (LPCTSTR p)      
 { 
 	PiwikScopedLock lck (Mutex);
 	
 	TSTRING url = p; 
-	int i = url.find (_T("://"));
-	if (i != TSTRING::npos)
-		url = url.substr (i + 3);
+	if (url.compare (0, 7, _T("http://")) == 0)
+		url = url.substr (7), Secure = false;
+	else if (url.compare (0, 8, _T("https://")) == 0)
+		url = url.substr (8), Secure = true;
+	else if (url.find (_T("://")) != TSTRING::npos)
+		return false;
+
 	if (url.find (_T("piwik.php")) != TSTRING::npos || url.find (_T("piwik-proxy.php")) != TSTRING::npos)
 		ApiUrl = url;
 	else
@@ -65,6 +70,8 @@ void PiwikDispatcher::SetApiUrl (LPCTSTR p)
 	int j = ApiUrl.find ('/');
 	ApiHost = WIDE_STRING (ApiUrl.substr (0, j), aux);
 	ApiPath = WIDE_STRING (ApiUrl.substr (j), aux);
+
+	return true;
 }
 
 int PiwikDispatcher::CurrentRequestMethod ()
@@ -109,11 +116,12 @@ void PiwikDispatcher::SetDryRun (bool v)
 
 // Dispatching
 
-bool PiwikDispatcher::Submit (string& qry)
+bool PiwikDispatcher::Submit (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
-	
-	Queries.push_back (qry);
+	string qry;
+
+	Queries.push_back (st.Serialize (Method, qry));
 
 	if (! Service)
 		LaunchService ();
@@ -142,7 +150,7 @@ void PiwikDispatcher::StopService ()
 {
 	Running = false;
 	::SetEvent (Wake);
-	if (::WaitForSingleObject (Service, 1000) != WAIT_OBJECT_0)
+	if (::WaitForSingleObject (Service, 5000) != WAIT_OBJECT_0)
 		::TerminateThread (Service, -1);
 	CloseHandle (Service); Service = 0;
 	CloseHandle (Wake); Wake = 0;
@@ -157,9 +165,9 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 
 	while (dsp && dsp->Running)
 	{
-		::WaitForSingleObject (dsp->Wake, dsp->DispatchInterval * 1000);
+		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval >= 0 ? dsp->DispatchInterval * 1000 : INFINITE));
 		cnt = 0, msg.clear ();
-		while (dsp->Running && dsp->Queries.size ())
+		while (dsp->Queries.size ())
 		{
 			dsp->Mutex.Activate ();
 			itm = dsp->Queries.front ();
@@ -168,13 +176,13 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			avl = dsp->Queries.size ();
 			dsp->Mutex.Release ();
 
-			if (dsp->Method == PIWIK_METHOD_GET)
-				dsp->SendRequest (PIWIK_METHOD_GET, itm);
+			if (itm[0] == '?')
+				dsp->SendRequest (itm, PIWIK_METHOD_GET);
 			else
 			{
-				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" QUOTES : ",[" QUOTES) + itm + QUOTES "]";
+				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : "," ) + itm;
 				if (cnt >= PIWIK_DISPATCH_BUNDLE || ! avl)
-					if (dsp->SendRequest (PIWIK_METHOD_POST, msg + "}"))
+					if (dsp->SendRequest (msg + "]}", PIWIK_METHOD_POST))
 						cnt = 0, msg.clear ();
 			}
 		}
@@ -184,7 +192,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 	return 0;
 }
 
-bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
+bool PiwikDispatcher::SendRequest (string& msg, PiwikMethod mth)
 {
 	HINTERNET Connection = 0, Request = 0;
 	wstring path;
@@ -196,14 +204,14 @@ bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
 
 	if (DryRun)
 	{
-		Logger.Log (L"DRYRUN - Host: " + ApiHost + L" Path: " + ApiPath + L" Query: " + ToUWide (msg, aux) + L"\n");
+		Logger.Log (L"DRYRUN - Host: " + ApiHost + L" Path: " + ApiPath + L" Query: " + ToWide (msg, aux) + L"\n");
 		return true;
 	}
 
 	if (mth == PIWIK_METHOD_GET)
 	{
 		verb = L"GET";
-		path = ApiPath + ToUWide (msg, aux);
+		path = ApiPath + ToWide (msg, aux);
 		data = 0, size = 0;
 	}
 	else
@@ -214,22 +222,42 @@ bool PiwikDispatcher::SendRequest (PiwikMethod mth, string& msg)
 	}
 
 	Connection = ::WinHttpConnect (Session, ApiHost.c_str (), INTERNET_DEFAULT_PORT, 0); 
-	if (Connection)
+	if (! Connection)
 	{
-		Request = ::WinHttpOpenRequest (Connection, verb, path.c_str (), 0, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 
-										WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
-		if (Request)
+		wostringstream os; os << L"Could not open HTTP connection to host " << ApiHost << L" (code: " << GetLastError () << L")";
+		Logger.Error (os.str ());
+		return false;
+	}
+
+	Request = ::WinHttpOpenRequest (Connection, verb, path.c_str (), 0, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 
+									WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
+	if (! Request)
+	{
+		wostringstream os; os << L"Could not create HTTP request (code: " << GetLastError () << L")";
+		Logger.Error (os.str ());
+		::WinHttpCloseHandle (Connection);
+		return false;
+	}
+
+	rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
+	if (rsl)
+	{
+		rsl = ::WinHttpReceiveResponse (Request, 0);
+		if (rsl)
 		{
-			rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
-			if (rsl)
-				rsl = ::WinHttpReceiveResponse (Request, 0);
+			DWORD size = 0, wrt = 0;
+			if (::WinHttpQueryDataAvailable (Request, &size) && size > 0)
+			{
+				LPSTR rsp = (LPSTR ) malloc (size + 2); memset (rsp, 0, size + 2);
+				rsl = ::WinHttpReadData (Request, (void*) rsp, size, &wrt);
+				string s1; wstring s2; s1 = rsp; Logger.Log (ToWide (s1, s2));
+				free (rsp);
+			}
 		}
 	}
 
-	if (Request)
-		::WinHttpCloseHandle (Request);
-	if (Connection)
-		::WinHttpCloseHandle (Connection);
+	::WinHttpCloseHandle (Request);
+	::WinHttpCloseHandle (Connection);
 	
 	return (rsl == TRUE);
 }

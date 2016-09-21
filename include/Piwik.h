@@ -15,8 +15,8 @@
 
 #include "../src/Config.h"
 #include "../src/Utilities.h"
-#include "../src/Dispatcher.h"
 #include "../src/State.h"
+#include "../src/Dispatcher.h"
 #include "../src/Client.h"
 
 

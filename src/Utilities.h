@@ -78,22 +78,6 @@ struct PiwikVariableSet
 	bool IsValid ();
 };
 
-class PiwikQueryBuilder : public ostringstream
-{
-private:
-	int  items;
-	char prefix ()  { return (items == 0 ? '?' : '&'); }
-
-public:
-	PiwikQueryBuilder ()  { items = 0; }
-
-	void AddParameter (LPCSTR nam, int val);
-	void AddParameter (LPCSTR nam, float val);
-	void AddParameter (LPCSTR nam, time_t val);
-	void AddParameter (LPCSTR nam, TSTRING& val);
-	void AddParameter (LPCSTR nam, PiwikVariableSet& val);
-};
-
 class PiwikLock
 {
 private:
@@ -137,12 +121,10 @@ public:
 // Helpers
 
 string&  ToUTF8 (wstring& src, string& trg);
-wstring& ToUWide (string& src, wstring& trg);
+wstring& ToWide (string& src, wstring& trg);
 string&  PercentEncode (string& src, string& trg);
 bool     MakeHexDigest (TSTRING& src, TSTRING& dgst, int ext);
 bool     GetScreenResolution (TSTRING& str);
-bool     IsAbsoluteUrl (TSTRING& url);
-void     MakeAbsoluteUrl (TSTRING& url);
 bool     ComposeUrl (TSTRING& prf, TSTRING& url);
 _int64   ReadRegistryValue (LPCTSTR apl, LPCTSTR usr, LPCTSTR name);
 bool     WriteRegistryValue (LPCTSTR apl, LPCTSTR usr, LPCTSTR name, _int64 val);

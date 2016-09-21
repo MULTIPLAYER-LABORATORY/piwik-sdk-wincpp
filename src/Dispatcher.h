@@ -28,7 +28,6 @@ using namespace std;
 class PiwikDispatcher
 {
 private:
-	PiwikLogger Logger;
 	TSTRING ApiUrl;
 	wstring ApiHost, ApiPath;
 	PiwikMethod Method;
@@ -40,6 +39,7 @@ private:
 
 	std::deque<string> Queries;
 	PiwikLock Mutex;
+	PiwikLogger Logger;
 	HANDLE Service;
 	HANDLE Wake;
 	HINTERNET Session;
@@ -48,9 +48,8 @@ public:
 	PiwikDispatcher ();
 	~PiwikDispatcher ();
 
-	void SetLogger (wostream* s, PiwikLogLevel lvl);
 	bool CurrentApiUrl (TSTRING& str);
-	void SetApiUrl (LPCTSTR p);
+	bool SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();
 	void SetRequestMethod (PiwikMethod m);
 	bool UsesSecureConnection ();
@@ -59,14 +58,15 @@ public:
 	void SetDispatchInterval (int t);
 	bool IsDryRun ();
 	void SetDryRun (bool v);
+	void SetLogger (wostream* s, PiwikLogLevel lvl);
 
-	bool Submit (string& qry);
+	bool Submit (PiwikState& st);
 	bool Flush ();
 
 private:
 	bool LaunchService ();
 	void StopService ();
 	static unsigned __stdcall ServiceRoutine (void*);
-	bool SendRequest (PiwikMethod mth, string& msg);
+	bool SendRequest (string& msg, PiwikMethod mth);
 };
 
