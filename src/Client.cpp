@@ -23,7 +23,7 @@ PiwikClient::PiwikClient (LPCTSTR url, int id)
 {
 	SetApiUrl (url);
 	SetSiteId (id);
-	GetScreenResolution (State.ScreenRes);
+	State.ScreenRes = GetScreenResolution ();
 	SetLocation (_T(""));
 	SessionStart = 0; 
 	SessionTimeout = PIWIK_SESSION_TIMEOUT;
@@ -55,7 +55,7 @@ void PiwikClient::SetUserId (LPCTSTR p)
 	PiwikScopedLock lck (Mutex);
 	
 	State.UserId = p; 
-	MakeHexDigest (State.UserId, State.VisitorId, 16);
+	State.VisitorId = MakeHexDigest (State.UserId, PIWIK_DIGEST_LENGTH);
 }
 
 bool PiwikClient::CurrentApiUrl (TSTRING& str)  

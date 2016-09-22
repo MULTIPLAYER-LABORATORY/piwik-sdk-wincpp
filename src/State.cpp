@@ -13,14 +13,15 @@
 
 #include "Config.h"
 #include "Utilities.h"
-#include "State.h"
 #include "QueryParams.h"
+#include "Serialize.h"
+#include "State.h"
 
 // Serialization of a tracking state associating it to the corresponding request parameters
 
-string& PiwikState::Serialize (PiwikMethod mth, string& qry)
+string PiwikState::Serialize (PiwikQueryFormat frmt)
 {
-	PiwikQueryBuilder qb (mth);
+	PiwikQueryBuilder qb (frmt);
 
 	qb.AddParameter (PARAM_SITE_ID, SiteId);
 	qb.AddParameter (PARAM_URL_PATH, TrackedPath);
@@ -77,54 +78,6 @@ string& PiwikState::Serialize (PiwikMethod mth, string& qry)
 	if (ScreenVariables.IsValid ())
 		qb.AddParameter (PARAM_SCREEN_SCOPE_CUSTOM_VARIABLES, ScreenVariables);
 
-	qry = qb.str () + qb.Suffix ();
-
-	return qry;
-}
-
-// PiwikQueryBuilder
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, int val)
-{
-	*this << Prefix () << nam << Assign () << val;
-	Items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, float val)
-{
-	*this << Prefix () << nam << Assign () << val;
-	Items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, time_t val)
-{
-	*this << Prefix () << nam << Assign () << val;
-	Items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, TSTRING& val)
-{
-	string s1, s2;
-	
-	*this << Prefix () << nam << Assign () << Quotes () << Encode (UTF8_STRING (val, s1), s2) << Quotes ();
-	Items++;
-}
-
-void PiwikQueryBuilder::AddParameter (LPCSTR nam, PiwikVariableSet& val)
-{
-	string s1, s2;
-	int n = 0;
-
-	*this << Prefix () << nam << Assign () << "{";
-	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
-	{
-		if (val.Items[i].IsValid ())
-		{
-			*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << Encode (UTF8_STRING (val.Items[i].Name, s1), s2);
-			*this << QUOTES << "," << QUOTES << Encode (UTF8_STRING (val.Items[i].Value, s1), s2) << QUOTES << "]";
-		}
-	}
-	*this << "}";
-	Items++;
+	return qb.Result ();
 }
 

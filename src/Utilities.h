@@ -30,15 +30,15 @@ using namespace std;
 #define AT_MOST(n, m)   ((n) < (m) ? (n) : (m));
 
 #ifdef UNICODE
-#define UTF8_STRING(s,t) ToUTF8(s,t)
+#define UTF8_STRING(s)  ToUTF8(s)
 #else
-#define UTF8_STRING(s,t) s
+#define UTF8_STRING(s)  s
 #endif
 
 #ifdef UNICODE
-#define WIDE_STRING(s,t) s
+#define WIDE_STRING(s)  s
 #else
-#define WIDE_STRING(s,t) ToWide(s,t)
+#define WIDE_STRING(s)  ToWide(s)
 #endif
 
 // Types
@@ -49,6 +49,12 @@ enum PiwikMethod
 {
 	PIWIK_METHOD_GET,
 	PIWIK_METHOD_POST
+};
+
+enum PiwikQueryFormat
+{
+	PIWIK_FORMAT_URL,
+	PIWIK_FORMAT_JSON
 };
 
 enum PiwikLogLevel
@@ -111,7 +117,7 @@ public:
 	PiwikLogger ()                      { Stream = 0; Level = PIWIK_INITIAL_LOG_LEVEL; }
 	void SetStream (wostream* s)        { Stream = s; }
 	void SetLevel (PiwikLogLevel lvl)   { Level = lvl; }
-	void Log (wstring& msg)             { if (Stream) Stream->write (msg.data (), msg.length ()); }
+	void Log (wstring& msg)             { if (Stream) Stream->write (PIWIK_LOG_PREFIX, wcslen (PIWIK_LOG_PREFIX)), Stream->write (msg.data (), msg.length ()); }
 	void Debug (wstring& msg)           { if (Level >= PIWIK_LOG_DEBUG) Log (msg); }
 	void Info (wstring& msg)            { if (Level >= PIWIK_LOG_INFO) Log (msg); }
 	void Error (wstring& msg)           { if (Level >= PIWIK_LOG_ERROR) Log (msg); }
@@ -120,11 +126,11 @@ public:
 
 // Helpers
 
-string&  ToUTF8 (wstring& src, string& trg);
-wstring& ToWide (string& src, wstring& trg);
-string&  PercentEncode (string& src, string& trg);
-bool     MakeHexDigest (TSTRING& src, TSTRING& dgst, int ext);
-bool     GetScreenResolution (TSTRING& str);
+string   ToUTF8 (wstring& src);
+wstring  ToWide (string& src);
+string   PercentEncode (string& src);
+TSTRING  MakeHexDigest (TSTRING& src, int lng);
+TSTRING  GetScreenResolution ();
 bool     ComposeUrl (TSTRING& prf, TSTRING& url);
 _int64   ReadRegistryValue (LPCTSTR apl, LPCTSTR usr, LPCTSTR name);
 bool     WriteRegistryValue (LPCTSTR apl, LPCTSTR usr, LPCTSTR name, _int64 val);

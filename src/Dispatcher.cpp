@@ -34,12 +34,6 @@ PiwikDispatcher::~PiwikDispatcher ()
 		StopService ();
 }
 
-void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
-{
-	Logger.SetStream (s);
-	Logger.SetLevel (lvl);
-}
-
 bool PiwikDispatcher::CurrentApiUrl (TSTRING& str)  
 { 
 	PiwikScopedLock lck (Mutex);
@@ -66,10 +60,9 @@ bool PiwikDispatcher::SetApiUrl (LPCTSTR p)
 	else
 		ComposeUrl (url, (ApiUrl = _T("piwik.php")));
 
-	wstring aux;
 	int j = ApiUrl.find ('/');
-	ApiHost = WIDE_STRING (ApiUrl.substr (0, j), aux);
-	ApiPath = WIDE_STRING (ApiUrl.substr (j), aux);
+	ApiHost = WIDE_STRING (ApiUrl.substr (0, j));
+	ApiPath = WIDE_STRING (ApiUrl.substr (j));
 
 	return true;
 }
@@ -114,14 +107,25 @@ void PiwikDispatcher::SetDryRun (bool v)
 	DryRun = v; 
 }
 
+void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
+{
+	Logger.SetStream (s);
+	Logger.SetLevel (lvl);
+}
+
 // Dispatching
 
 bool PiwikDispatcher::Submit (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
-	string qry;
+	Request itm;
 
-	Queries.push_back (st.Serialize (Method, qry));
+	itm.Host   = ApiHost;
+	itm.Path   = ApiPath;
+	itm.Method = Method;
+	itm.Query  = st.Serialize ((Method == PIWIK_METHOD_GET ? PIWIK_FORMAT_URL : PIWIK_FORMAT_JSON));
+
+	Requests.push_back (itm);
 
 	if (! Service)
 		LaunchService ();
@@ -160,29 +164,30 @@ void PiwikDispatcher::StopService ()
 unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 {
 	PiwikDispatcher* dsp = (PiwikDispatcher*) arg;
-	string itm, msg;
+	Request itm;
+	string msg;
 	int cnt, avl;
 
 	while (dsp && dsp->Running)
 	{
 		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval >= 0 ? dsp->DispatchInterval * 1000 : INFINITE));
 		cnt = 0, msg.clear ();
-		while (dsp->Queries.size ())
+		while (dsp->Requests.size ())
 		{
 			dsp->Mutex.Activate ();
-			itm = dsp->Queries.front ();
-			dsp->Queries.pop_front ();
+			itm = dsp->Requests.front ();
+			dsp->Requests.pop_front ();
 			cnt++;
-			avl = dsp->Queries.size ();
+			avl = dsp->Requests.size ();
 			dsp->Mutex.Release ();
 
-			if (itm[0] == '?')
-				dsp->SendRequest (itm, PIWIK_METHOD_GET);
+			if (itm.Method == PIWIK_METHOD_GET)
+				dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
 			else
 			{
-				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : "," ) + itm;
-				if (cnt >= PIWIK_DISPATCH_BUNDLE || ! avl)
-					if (dsp->SendRequest (msg + "]}", PIWIK_METHOD_POST))
+				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : "," ) + itm.Query;
+				if (cnt >= PIWIK_POST_BUNDLE || ! avl)
+					if (dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}"))
 						cnt = 0, msg.clear ();
 			}
 		}
@@ -192,39 +197,36 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 	return 0;
 }
 
-bool PiwikDispatcher::SendRequest (string& msg, PiwikMethod mth)
+bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry)
 {
 	HINTERNET Connection = 0, Request = 0;
-	wstring path;
 	wchar_t* verb;
-	wstring aux;
 	void* data;
 	int size;
 	BOOL rsl = 0;
 
 	if (DryRun)
 	{
-		Logger.Log (L"DRYRUN - Host: " + ApiHost + L" Path: " + ApiPath + L" Query: " + ToWide (msg, aux) + L"\n");
+		Logger.Log (L"DRYRUN - Host: " + host + L" Path: " + path + L" Query: " + ToWide (qry) + L"\n");
 		return true;
 	}
 
 	if (mth == PIWIK_METHOD_GET)
 	{
 		verb = L"GET";
-		path = ApiPath + ToWide (msg, aux);
+		path += ToWide (qry);
 		data = 0, size = 0;
 	}
 	else
 	{
 		verb = L"POST";
-		path = ApiPath;
-		data = (void*) msg.data (), size = msg.size ();
+		data = (void*) qry.data (), size = qry.size ();
 	}
 
-	Connection = ::WinHttpConnect (Session, ApiHost.c_str (), INTERNET_DEFAULT_PORT, 0); 
+	Connection = ::WinHttpConnect (Session, host.c_str (), INTERNET_DEFAULT_PORT, 0); 
 	if (! Connection)
 	{
-		wostringstream os; os << L"Could not open HTTP connection to host " << ApiHost << L" (code: " << GetLastError () << L")";
+		wostringstream os; os << L"Could not open HTTP connection to host " << host << L" (code: " << GetLastError () << L")";
 		Logger.Error (os.str ());
 		return false;
 	}
@@ -243,6 +245,7 @@ bool PiwikDispatcher::SendRequest (string& msg, PiwikMethod mth)
 	if (rsl)
 	{
 		rsl = ::WinHttpReceiveResponse (Request, 0);
+		/*
 		if (rsl)
 		{
 			DWORD size = 0, wrt = 0;
@@ -250,10 +253,11 @@ bool PiwikDispatcher::SendRequest (string& msg, PiwikMethod mth)
 			{
 				LPSTR rsp = (LPSTR ) malloc (size + 2); memset (rsp, 0, size + 2);
 				rsl = ::WinHttpReadData (Request, (void*) rsp, size, &wrt);
-				string s1; wstring s2; s1 = rsp; Logger.Log (ToWide (s1, s2));
+				string s = rsp; Logger.Log (ToWide (s));
 				free (rsp);
 			}
 		}
+		*/
 	}
 
 	::WinHttpCloseHandle (Request);

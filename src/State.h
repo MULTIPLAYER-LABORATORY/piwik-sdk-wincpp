@@ -63,29 +63,6 @@ struct PiwikState : public PiwikBasicState
 	PiwikState ()      { NewSession = 0; VisitCount = 0; FirstVisit = LastVisit = 0; EventValue = 0; 
 	                     Goal = 0; Revenue = 0; Random = 0; }
 								
-	string& Serialize (PiwikMethod mth, string& qry);
+	string Serialize (PiwikQueryFormat frmt);
 };
-
-class PiwikQueryBuilder : public ostringstream
-{
-private:
-	PiwikMethod Method;
-	int Items;
-
-public:
-	PiwikQueryBuilder (PiwikMethod mth)  { Method = mth; Items = 0; }
-
-	void AddParameter (LPCSTR nam, int val);
-	void AddParameter (LPCSTR nam, float val);
-	void AddParameter (LPCSTR nam, time_t val);
-	void AddParameter (LPCSTR nam, TSTRING& val);
-	void AddParameter (LPCSTR nam, PiwikVariableSet& val);
-
-	char* Prefix ()  { if (Method == PIWIK_METHOD_GET) return (! Items ? "?" : "&"); else return (! Items ? "{" QUOTES : "," QUOTES); }
-	char* Assign ()  { if (Method == PIWIK_METHOD_GET) return "="; else return QUOTES ":"; }
-	char* Quotes ()  { if (Method == PIWIK_METHOD_GET) return ""; else return QUOTES; }
-	char* Suffix ()  { if (Method == PIWIK_METHOD_GET) return ""; else return "}"; }
-	string& Encode (string& str, string& aux)   { if (Method == PIWIK_METHOD_GET) return PercentEncode (str, aux); return str; }
-};
-
 

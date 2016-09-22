@@ -15,19 +15,20 @@
 
 // Symbols
 
-#define PIWIK_LOG_PREFIX           _T("PIWIK:")
 #define PIWIK_API_VERSION          1
 #define PIWIK_BASIC_METHOD         PIWIK_METHOD_POST
 #define PIWIK_USER_AGENT           _T("Piwik Client Windows Desktop")
+#define PIWIK_LOG_PREFIX           L"PIWIK:"
 #define PIWIK_INITIAL_LOG_LEVEL    PIWIK_LOG_ERROR
-#define PIWIK_RECORDING_VALUE      1
-#define PIWIK_SEND_IMAGE           0
 #define PIWIK_CUSTOM_VARIABLES     5
 #define PIWIK_VARIABLE_LENGTH      200
-#define PIWIK_SESSION_TIMEOUT      30   // sec before restarting a client session
-#define PIWIK_CONNECTION_TIMEOUT   5    // sec while trying to establish a connection
-#define PIWIK_DISPATCH_INTERVAL    120  // sec between API requests
-#define PIWIK_DISPATCH_BUNDLE      20   // number of queries sent together in one request
+#define PIWIK_DIGEST_LENGTH        16
+#define PIWIK_SESSION_TIMEOUT      (30 * 60)  // sec before restarting a client session
+#define PIWIK_CONNECTION_TIMEOUT   5          // sec while trying to establish a connection
+#define PIWIK_DISPATCH_INTERVAL    (2 * 60)   // sec between API requests
+#define PIWIK_POST_BUNDLE          20         // number of queries sent together in one POST request
+#define PIWIK_RECORDING_VALUE      1          // rec parameter value
+#define PIWIK_SEND_IMAGE           0          // send_image parameter value
 
 // Target Operating System Version
 

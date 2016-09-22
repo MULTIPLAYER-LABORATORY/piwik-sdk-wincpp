@@ -28,6 +28,14 @@ using namespace std;
 class PiwikDispatcher
 {
 private:
+	struct Request
+	{
+		wstring Host;
+		wstring Path;
+		PiwikMethod Method;
+		string Query;
+	};
+
 	TSTRING ApiUrl;
 	wstring ApiHost, ApiPath;
 	PiwikMethod Method;
@@ -37,7 +45,7 @@ private:
 	bool DryRun;
 	bool Running;
 
-	std::deque<string> Queries;
+	std::deque<Request> Requests;
 	PiwikLock Mutex;
 	PiwikLogger Logger;
 	HANDLE Service;
@@ -67,6 +75,6 @@ private:
 	bool LaunchService ();
 	void StopService ();
 	static unsigned __stdcall ServiceRoutine (void*);
-	bool SendRequest (string& msg, PiwikMethod mth);
+	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
 };
 

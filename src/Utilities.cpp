@@ -44,8 +44,9 @@ bool PiwikVariableSet::IsValid ()
 
 // Helpers
 
-string& ToUTF8 (wstring& src, string& trg)
+string ToUTF8 (wstring& src)
 {
+	string trg;
 	char* bfr;
 	int cnt;
 	
@@ -68,8 +69,9 @@ string& ToUTF8 (wstring& src, string& trg)
 	return trg;
 }
 
-wstring& ToWide (string& src, wstring& trg)
+wstring ToWide (string& src)
 {
+	wstring trg;
 	wchar_t* bfr;
 	int cnt;
 	
@@ -88,7 +90,7 @@ wstring& ToWide (string& src, wstring& trg)
 	return trg;
 }
 
-string& PercentEncode (string& src, string& trg)
+string PercentEncode (string& src)
 {
     ostringstream os;
 	char hexdigits[] = "0123456789ABCDEF";
@@ -105,14 +107,13 @@ string& PercentEncode (string& src, string& trg)
 			os << '%' << hexdigits[c >> 4] << hexdigits[c & 0x0F];
     }
 
-    trg = os.str ();
-
-	return trg;
+    return os.str ();
 }
 
-bool MakeHexDigest (TSTRING& src, TSTRING& dgst, int ext)
+TSTRING MakeHexDigest (TSTRING& src, int lng)
 {
 	#define MD5LEN  16
+	TSTRING trg;
 	DWORD stt = 0;
 	HCRYPTPROV hProv = 0;
 	HCRYPTHASH hHash = 0;
@@ -120,9 +121,8 @@ bool MakeHexDigest (TSTRING& src, TSTRING& dgst, int ext)
 	DWORD cnt = MD5LEN;
 	TCHAR result[MD5LEN * 2];
 	CHAR hexdigits[] = "0123456789ABCDEF";
-	string aux;
 	
-	string& enc = UTF8_STRING (src, aux);
+	string enc = UTF8_STRING (src);
 
 	// Need some data to digest
 	if (enc.length () < 4)
@@ -170,26 +170,21 @@ bool MakeHexDigest (TSTRING& src, TSTRING& dgst, int ext)
 	::CryptDestroyHash (hHash);
 	::CryptReleaseContext (hProv, 0);
 
-	int n = AT_MOST (ext, (int) (cnt * 2));
-	dgst.assign (result, n);
+	int n = AT_MOST (lng, (int) (cnt * 2));
+	trg.assign (result, n);
 	
-	return true; 
+	return trg; 
 }   
 
-bool GetScreenResolution (TSTRING& str)
+TSTRING GetScreenResolution ()
 {
 	TCHAR bfr[64];
 	
 	int x = ::GetSystemMetrics (SM_CXSCREEN); 
 	int y = ::GetSystemMetrics (SM_CYSCREEN); 
-	if (x > 0 && y > 0)
-	{
-		_stprintf_s (bfr, _T("%dx%d"), x, y);
-		str = bfr;
-		return true;
-	}
+	_stprintf_s (bfr, _T("%dx%d"), x, y);
 	
-	return false;
+	return TSTRING (bfr);
 }
 
 bool ComposeUrl (TSTRING& prf, TSTRING& url)
