@@ -117,10 +117,12 @@ public:
 	PiwikLogger ()                      { Stream = 0; Level = PIWIK_INITIAL_LOG_LEVEL; }
 	void SetStream (wostream* s)        { Stream = s; }
 	void SetLevel (PiwikLogLevel lvl)   { Level = lvl; }
-	void Log (wstring& msg)             { if (Stream) Stream->write (PIWIK_LOG_PREFIX, wcslen (PIWIK_LOG_PREFIX)), Stream->write (msg.data (), msg.length ()); }
-	void Debug (wstring& msg)           { if (Level >= PIWIK_LOG_DEBUG) Log (msg); }
-	void Info (wstring& msg)            { if (Level >= PIWIK_LOG_INFO) Log (msg); }
-	void Error (wstring& msg)           { if (Level >= PIWIK_LOG_ERROR) Log (msg); }
+	void WritePrefix ()                 { Stream->write (PIWIK_LOG_PREFIX, wcslen (PIWIK_LOG_PREFIX)); }
+	void WriteSuffix ()                 { Stream->write (L"\n", 1); }
+	void Log (wstring& msg)             { if (Stream) WritePrefix (), Stream->write (msg.data (), msg.length ()), WriteSuffix (); }
+	void Debug (wstring& msg)           { if (PIWIK_LOG_DEBUG >= Level) Log (msg); }
+	void Info (wstring& msg)            { if (PIWIK_LOG_INFO >= Level) Log (msg); }
+	void Error (wstring& msg)           { if (PIWIK_LOG_ERROR >= Level) Log (msg); }
 	bool IsValid ()                     { return (Stream != 0); }
 };
 

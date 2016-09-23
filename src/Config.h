@@ -18,7 +18,7 @@
 #define PIWIK_API_VERSION          1
 #define PIWIK_BASIC_METHOD         PIWIK_METHOD_POST
 #define PIWIK_USER_AGENT           _T("Piwik Client Windows Desktop")
-#define PIWIK_LOG_PREFIX           L"PIWIK:"
+#define PIWIK_LOG_PREFIX           L"PIWIK: "
 #define PIWIK_INITIAL_LOG_LEVEL    PIWIK_LOG_ERROR
 #define PIWIK_CUSTOM_VARIABLES     5
 #define PIWIK_VARIABLE_LENGTH      200

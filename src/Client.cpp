@@ -41,13 +41,11 @@ void PiwikClient::SetSiteId (int id)
 	State.SiteId = id; 
 }
 
-bool PiwikClient::CurrentUserId (TSTRING& str)
+TSTRING PiwikClient::CurrentUserId ()
 { 
 	PiwikScopedLock lck (Mutex);
 	
-	str = State.UserId; 
-
-	return ! str.empty (); 
+	return State.UserId; 
 }
 
 void PiwikClient::SetUserId (LPCTSTR p)         
@@ -58,9 +56,9 @@ void PiwikClient::SetUserId (LPCTSTR p)
 	State.VisitorId = MakeHexDigest (State.UserId, PIWIK_DIGEST_LENGTH);
 }
 
-bool PiwikClient::CurrentApiUrl (TSTRING& str)  
+TSTRING PiwikClient::CurrentApiUrl ()  
 {
-	return Dispatcher.CurrentApiUrl (str);
+	return Dispatcher.CurrentApiUrl ();
 }
 
 bool PiwikClient::SetApiUrl (LPCTSTR p)      
@@ -88,13 +86,11 @@ void PiwikClient::SetSecureConnection (bool f)
 	Dispatcher.SetSecureConnection (f);
 }
 
-bool PiwikClient::CurrentUserAgent (TSTRING& str)  
+TSTRING PiwikClient::CurrentUserAgent ()  
 { 
 	PiwikScopedLock lck (Mutex);
 	
-	str = State.UserAgent; 
-
-	return ! str.empty (); 
+	return State.UserAgent; 
 }
 
 void PiwikClient::SetUserAgent (LPCTSTR p)      
@@ -104,13 +100,11 @@ void PiwikClient::SetUserAgent (LPCTSTR p)
 	State.UserAgent = p;
 }
 	
-bool PiwikClient::CurrentLanguage (TSTRING& str)  
+TSTRING PiwikClient::CurrentLanguage ()  
 { 
 	PiwikScopedLock lck (Mutex);
 	
-	str = State.Language; 
-
-	return ! str.empty (); 
+	return State.Language; 
 }
 
 void PiwikClient::SetLanguage (LPCTSTR p)      
@@ -132,13 +126,11 @@ void PiwikClient::SetUserVariable (LPCTSTR nam, LPCTSTR val, int ind)
 	}
 }
 
-bool PiwikClient::CurrentApplication (TSTRING& str)  
+TSTRING PiwikClient::CurrentApplication ()  
 { 
 	PiwikScopedLock lck (Mutex);
 	
-	str = Application; 
-
-	return ! str.empty (); 
+	return Application; 
 }
 
 void PiwikClient::SetApplication (LPCTSTR p)      
@@ -148,13 +140,11 @@ void PiwikClient::SetApplication (LPCTSTR p)
 	Application = p; 
 }
 
-bool PiwikClient::CurrentLocation (TSTRING& str)  
+TSTRING PiwikClient::CurrentLocation ()  
 { 
 	PiwikScopedLock lck (Mutex);
 	
-	str = Location; 
-
-	return ! str.empty (); 
+	return Location; 
 }
 
 void PiwikClient::SetLocation (LPCTSTR p)      
@@ -208,7 +198,7 @@ void PiwikClient::SetDisabled (bool v)
 	Disabled = v; 
 }
 
-// DryRun will follow all tracking steps but will dunp the request to the logger instead of the network
+// DryRun will follow all the tracking steps but will not issue the request to the network
 
 bool PiwikClient::IsDryRun ()                     
 { 
@@ -332,7 +322,7 @@ bool PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece
 	return Track (st);
 }
 
-// Generic tracking routine
+// Generic tracking routine: can also be called directly with a custom constructed state
 
 bool PiwikClient::Track (PiwikState& st)
 {

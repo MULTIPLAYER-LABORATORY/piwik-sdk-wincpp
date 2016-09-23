@@ -81,7 +81,7 @@ wstring ToWide (string& src)
 	if (bfr)
 	{
 		// returned count doesn't include a null terminator if src.length is explicitly specified
-		cnt = ::MultiByteToWideChar (CP_ACP, 0, src.data (), src.length (), bfr, src.length ());
+		cnt = ::MultiByteToWideChar (CP_UTF8, 0, src.data (), src.length (), bfr, src.length ());
 		if (cnt > 0)
 			trg.assign (bfr, cnt);
 		free (bfr);

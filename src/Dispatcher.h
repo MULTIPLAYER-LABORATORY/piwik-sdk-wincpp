@@ -56,7 +56,7 @@ public:
 	PiwikDispatcher ();
 	~PiwikDispatcher ();
 
-	bool CurrentApiUrl (TSTRING& str);
+	TSTRING CurrentApiUrl ();
 	bool SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();
 	void SetRequestMethod (PiwikMethod m);
@@ -76,5 +76,6 @@ private:
 	void StopService ();
 	static unsigned __stdcall ServiceRoutine (void*);
 	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
+	void ReadResponse (HINTERNET rqst);
 };
 

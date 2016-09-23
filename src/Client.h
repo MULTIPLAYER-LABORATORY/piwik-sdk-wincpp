@@ -43,22 +43,22 @@ public:
 	
 	int  CurrentSiteId ();
 	void SetSiteId (int id);
-	bool CurrentUserId (TSTRING& str);
+	TSTRING CurrentUserId ();
 	void SetUserId (LPCTSTR p);
-	bool CurrentApiUrl (TSTRING& str);
+	TSTRING CurrentApiUrl ();
 	bool SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();
 	void SetRequestMethod (PiwikMethod m);
 	bool UsesSecureConnection ();
 	void SetSecureConnection (bool f);
-	bool CurrentUserAgent (TSTRING& str);
+	TSTRING CurrentUserAgent ();
 	void SetUserAgent (LPCTSTR p);
-	bool CurrentLanguage (TSTRING& str);
+	TSTRING CurrentLanguage ();
 	void SetLanguage (LPCTSTR p);
 	void SetUserVariable (LPCTSTR nam, LPCTSTR val, int ind = -1);
-	bool CurrentApplication (TSTRING& str);
+	TSTRING CurrentApplication ();
 	void SetApplication (LPCTSTR p);
-	bool CurrentLocation (TSTRING& str);
+	TSTRING CurrentLocation ();
 	void SetLocation (LPCTSTR p);
 	bool SetSessionTimeout (int t);
 	void SetConnectionTimeout (int t);
