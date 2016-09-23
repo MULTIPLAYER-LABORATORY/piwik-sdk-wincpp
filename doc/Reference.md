@@ -48,10 +48,8 @@ These are the entry points provided by the Piwik tracking library:
 	
 	Allows to set the HTTP request method to be used. It can be one of the following values: 
 		
-			```
-			PIWIK_METHOD_GET
-			PIWIK_METHOD_POST			
-			```
+		PIWIK_METHOD_GET
+		PIWIK_METHOD_POST			
 		
 	Using GET will send the query parameters URL-encoded within the URL line of the request. Using POST (the default) will send the query encoded as a JSON object in the body of the request. This results in a more efficient transfer since several queries (up to 20) can be sent together in one physical request.
 		
@@ -237,6 +235,6 @@ These are the entry points provided by the Piwik tracking library:
 		
 	``bool Flush ()``
 	
-	Allows to send all pending requests synchronously to the server. This is called implicitly when terminating the Piwik instance.
+	Allows to send all pending requests to the server. This is called implicitly when closing the Piwik instance.
 		
 	
