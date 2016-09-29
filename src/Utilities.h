@@ -112,18 +112,18 @@ class PiwikLogger
 private:
 	wostream* Stream;
 	PiwikLogLevel Level;
+	PiwikLock Mutex;
 
 public:
-	PiwikLogger ()                      { Stream = 0; Level = PIWIK_INITIAL_LOG_LEVEL; }
-	void SetStream (wostream* s)        { Stream = s; }
-	void SetLevel (PiwikLogLevel lvl)   { Level = lvl; }
-	void WritePrefix ()                 { Stream->write (PIWIK_LOG_PREFIX, wcslen (PIWIK_LOG_PREFIX)); }
-	void WriteSuffix ()                 { Stream->write (L"\n", 1); }
-	void Log (wstring& msg)             { if (Stream) WritePrefix (), Stream->write (msg.data (), msg.length ()), WriteSuffix (); }
-	void Debug (wstring& msg)           { if (PIWIK_LOG_DEBUG >= Level) Log (msg); }
-	void Info (wstring& msg)            { if (PIWIK_LOG_INFO >= Level) Log (msg); }
-	void Error (wstring& msg)           { if (PIWIK_LOG_ERROR >= Level) Log (msg); }
-	bool IsValid ()                     { return (Stream != 0); }
+	PiwikLogger ()                          { Stream = 0; Level = PIWIK_INITIAL_LOG_LEVEL; }
+	void SetStream (wostream* s)            { Stream = s; }
+	void SetLevel (PiwikLogLevel lvl)       { Level = lvl; }
+
+	void Log (LPCWSTR msg, LPCSTR data = 0, int code = 0, int lvl = -1);
+
+	void Debug (LPCWSTR msg, LPCSTR data = 0, int code = 0)     { if (Stream && PIWIK_LOG_DEBUG >= Level) Log (msg, data, code, PIWIK_LOG_DEBUG); }
+	void Info (LPCWSTR msg, LPCSTR data = 0, int code = 0)      { if (Stream && PIWIK_LOG_INFO >= Level) Log (msg, data, code, PIWIK_LOG_INFO); }
+	void Error (LPCWSTR msg, LPCSTR data = 0, int code = 0)     { if (Stream && PIWIK_LOG_ERROR >= Level) Log (msg, data, code, PIWIK_LOG_ERROR); }
 };
 
 // Helpers

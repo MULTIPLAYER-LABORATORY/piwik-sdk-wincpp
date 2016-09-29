@@ -23,15 +23,14 @@ PiwikDispatcher::PiwikDispatcher ()
 	Method = PIWIK_BASIC_METHOD; 
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
 	DispatchInterval = PIWIK_DISPATCH_INTERVAL; 
-	Secure = DryRun = Running = false; 
+	Secure = DryRun = Synchronous = Running = false; 
 	Service = Wake = 0;
 	Session = 0;
 }
 
 PiwikDispatcher::~PiwikDispatcher ()
 {
-	if (Service)
-		StopService ();
+	ShutdownService ();
 }
 
 TSTRING PiwikDispatcher::CurrentApiUrl ()  
@@ -61,6 +60,8 @@ bool PiwikDispatcher::SetApiUrl (LPCTSTR p)
 	int j = ApiUrl.find ('/');
 	ApiHost = WIDE_STRING (ApiUrl.substr (0, j));
 	ApiPath = WIDE_STRING (ApiUrl.substr (j));
+
+	Logger.Info ((L"Changed API URL to host: " + ApiHost + L" path: " + ApiPath).c_str ());
 
 	return true;
 }
@@ -93,6 +94,8 @@ void PiwikDispatcher::SetConnectionTimeout (int t)
 void PiwikDispatcher::SetDispatchInterval (int t)
 {
 	DispatchInterval = t;
+	Synchronous = (t == 0);
+	Logger.Info ((Synchronous ? L"Entering synchronous mode" : L"Changed dispatch interval"), 0, t);
 }
 
 bool PiwikDispatcher::IsDryRun ()                     
@@ -103,6 +106,7 @@ bool PiwikDispatcher::IsDryRun ()
 void PiwikDispatcher::SetDryRun (bool v)              
 { 
 	DryRun = v; 
+	Logger.Info ((v ? L"Activated dry run mode" : L"Activated network mode"));
 }
 
 void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
@@ -128,37 +132,49 @@ bool PiwikDispatcher::Submit (PiwikState& st)
 	if (! Service)
 		LaunchService ();
 
-	return Running; 
+	if (Synchronous)
+		Flush ();
+
+	Logger.Debug (L"Submitting query: ", itm.Query.c_str ());
+
+	return (Service != 0); 
 }
 
 bool PiwikDispatcher::Flush ()
 {
-	::SetEvent (Wake);
-	return true;
+	return (Service && ::SetEvent (Wake));
 }
 
 // Internals
 
 bool PiwikDispatcher::LaunchService ()
 {
-	Logger.Info (L"Starting Piwik service to host " + ApiHost);
+	Logger.Info (L"Starting Piwik dispatch service");
+
 	Running = true;
-	Session = ::WinHttpOpen (L"Piwik Desktop Client", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-	Wake = ::CreateEvent (0, FALSE, FALSE, 0);
-	Service = (HANDLE) _beginthreadex (0, 0, ServiceRoutine, this, 0, 0);
-	return (Session && Wake && Service);
+	if ((Session = ::WinHttpOpen (L"Piwik Desktop Client", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)))
+		if ((Wake = ::CreateEvent (0, FALSE, FALSE, 0)))
+			if ((Service = (HANDLE) _beginthreadex (0, 0, ServiceRoutine, this, 0, 0)))
+				return true;
+
+	Logger.Error (L"Could not launch Piwik dispatch service");
+	return false;
 }
 
-void PiwikDispatcher::StopService ()
+void PiwikDispatcher::ShutdownService ()
 {
-	Logger.Info (L"Terminating Piwik service to host " + ApiHost);
+	Logger.Info (L"Terminating Piwik dispatch service");
+
 	Running = false;
-	::SetEvent (Wake);
-	if (::WaitForSingleObject (Service, 5000) != WAIT_OBJECT_0)
+	Flush ();
+	if (Service && ::WaitForSingleObject (Service, 5000) != WAIT_OBJECT_0)
 		::TerminateThread (Service, -1);
-	CloseHandle (Service); Service = 0;
-	CloseHandle (Wake); Wake = 0;
-	WinHttpCloseHandle (Session); Session = 0;
+	if (Service)
+		CloseHandle (Service), Service = 0;
+	if (Wake)
+		CloseHandle (Wake), Wake = 0;
+	if (Session)
+		WinHttpCloseHandle (Session), Session = 0;
 }
 
 unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
@@ -170,7 +186,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 
 	while (dsp && dsp->Running)
 	{
-		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval >= 0 ? dsp->DispatchInterval * 1000 : INFINITE));
+		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval > 0 ? dsp->DispatchInterval * 1000 - 500 : INFINITE));
 		cnt = 0, msg.clear ();
 		while (dsp->Requests.size ())
 		{
@@ -185,7 +201,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 				dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
 			else
 			{
-				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : "," ) + itm.Query;
+				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : ",") + itm.Query;
 				if (cnt >= PIWIK_POST_BUNDLE || ! avl)
 					if (dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}"))
 						cnt = 0, msg.clear ();
@@ -207,7 +223,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 
 	if (DryRun)
 	{
-		Logger.Log (L"DRYRUN - Host: " + host + L" Path: " + path + L" Query: " + ToWide (qry));
+		Logger.Log (L"DRYRUN - Not sending request: ", qry.c_str ());
 		return true;
 	}
 
@@ -226,7 +242,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 	Connection = ::WinHttpConnect (Session, host.c_str (), INTERNET_DEFAULT_PORT, 0); 
 	if (! Connection)
 	{
-		Logger.Error (L"Could not open HTTP connection to host " + host);
+		Logger.Error (L"Could not open HTTP connection", 0, GetLastError ());
 		return false;
 	}
 
@@ -234,7 +250,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 									WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
 	if (! Request)
 	{
-		Logger.Error (L"Could not create HTTP request to path " + path);
+		Logger.Error (L"Could not create HTTP request to path", 0, GetLastError ());
 		::WinHttpCloseHandle (Connection);
 		return false;
 	}
@@ -242,7 +258,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 	rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
 	if (! rsl)
 	{
-		Logger.Error (L"Could not send HTTP request to path " + path);
+		Logger.Error (L"Could not send HTTP request", 0, GetLastError ());
 	}
 	else
 	{
@@ -250,6 +266,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 		#ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
 			ReadResponse (Request);
 		#endif
+		Logger.Debug (L"Sent HTTP request: ", qry.c_str ());
 	}
 
 	::WinHttpCloseHandle (Request);
@@ -265,7 +282,7 @@ void PiwikDispatcher::ReadResponse (HINTERNET rqst)
 	{
 		LPSTR rsp = (LPSTR) malloc (size + 2); memset (rsp, 0, size + 2);
 		::WinHttpReadData (rqst, (void*) rsp, size, &wrt);
-		Logger.Log (ToWide (string (rsp)));
+		Logger.Log (L"Response: ", rsp);
 		free (rsp);
 	}
 }

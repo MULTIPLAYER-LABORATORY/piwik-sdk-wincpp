@@ -16,6 +16,9 @@
 
 // PiwikVariableSet
 
+// GetIndex: first lookup a variable with the same name and use this index if found,
+// otherwise look for a free slot or take the last one.
+
 int PiwikVariableSet::GetIndex (LPCTSTR nam)
 {
 	int i;
@@ -40,6 +43,42 @@ bool PiwikVariableSet::IsValid ()
 			return true; 
 	
 	return false; 
+}
+
+// PiwikLogger
+
+void PiwikLogger::Log (LPCWSTR msg, LPCSTR data, int code, int lvl)
+{ 
+	SYSTEMTIME t;
+	WCHAR stamp[256];
+	WCHAR* mdl;
+
+	if (Stream)
+	{
+		GetLocalTime (&t);
+		wsprintf (stamp, L"%d-%02d-%02d %02d:%02d:%02d.%03d ", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+		switch (lvl)
+		{
+		case PIWIK_LOG_DEBUG: mdl = L"DEBUG: "; break;
+		case PIWIK_LOG_INFO: mdl = L"INFO: "; break;
+		case PIWIK_LOG_ERROR: mdl = L"ERROR: "; break;
+		default: mdl = L"LOG: "; break;
+		}
+
+		Mutex.Activate ();
+		Stream->write (PIWIK_LOG_PREFIX, wcslen (PIWIK_LOG_PREFIX));
+		Stream->write (stamp, wcslen (stamp));
+		Stream->write (mdl, wcslen (mdl));
+		if (msg)
+			Stream->write (msg, wcslen (msg)); 
+		if (data)
+			*Stream << data;
+		if (code)
+			*Stream << L" (code: " << code << L")"; 
+		Stream->put ('\n'); 
+		Stream->flush ();
+		Mutex.Release ();
+	}
 }
 
 // Helpers

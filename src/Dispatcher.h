@@ -43,6 +43,7 @@ private:
 	int DispatchInterval;
 	bool Secure;
 	bool DryRun;
+	bool Synchronous;
 	bool Running;
 
 	std::deque<Request> Requests;
@@ -73,7 +74,7 @@ public:
 
 private:
 	bool LaunchService ();
-	void StopService ();
+	void ShutdownService ();
 	static unsigned __stdcall ServiceRoutine (void*);
 	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
 	void ReadResponse (HINTERNET rqst);
