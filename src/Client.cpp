@@ -114,7 +114,8 @@ void PiwikClient::SetLanguage (LPCTSTR p)
 	State.Language = p; 
 }
 
-// Index if omitted will be determined by looking up a variable with the same name in the current set
+// Index (1-5) is the target slot to be used.
+// If omitted it will be determined by looking up a variable with the same name in the current set.
 
 void PiwikClient::SetUserVariable (LPCTSTR nam, LPCTSTR val, int ind)
 {
@@ -125,6 +126,8 @@ void PiwikClient::SetUserVariable (LPCTSTR nam, LPCTSTR val, int ind)
 			State.UserVariables.Items[i].Set (nam, val);
 	}
 }
+
+// Application name is used to store persistent data in the registry
 
 TSTRING PiwikClient::CurrentApplication ()  
 { 
@@ -140,6 +143,8 @@ void PiwikClient::SetApplication (LPCTSTR p)
 	Application = p; 
 }
 
+// Location will be prefixed to any tracked URLs not absolute
+
 TSTRING PiwikClient::CurrentLocation ()  
 { 
 	PiwikScopedLock lck (Mutex);
@@ -154,6 +159,8 @@ void PiwikClient::SetLocation (LPCTSTR p)
 	Location = p; 
 }
 
+// Session timeout determines the frequency at which general site information will be resent to the server
+
 bool PiwikClient::SetSessionTimeout (int t)
 {
 	return (t > 0 && (SessionTimeout = t));
@@ -163,6 +170,11 @@ void PiwikClient::SetConnectionTimeout (int t)
 {
 	Dispatcher.SetConnectionTimeout (t);
 }
+
+// Dispatch interval determines the network strategy as follows:
+// - if positive, it will batch all submitted requests that many seconds before sending them to the server
+// - if negative, it will disable automatic sending and will require explicit flush
+// - if zero, it will cause requests to be sent immediately after submission
 
 void PiwikClient::SetDispatchInterval (int t)
 {
@@ -174,7 +186,7 @@ void PiwikClient::StartNewSession ()
 	SessionStart = 0; 
 }
 
-// Persistent will try to store statistical data for this user in the registry
+// Persistent mode will try to store statistical data for this user in the registry
 
 bool PiwikClient::IsPersistent ()                     
 { 
@@ -186,7 +198,7 @@ void PiwikClient::SetPersistent (bool v)
 	Persistent = v; 
 }
 
-// Disabling the client will effectively stop tracking by keeping all active configuration
+// Disabling the client will cause all tracking requests to be ignored
 
 bool PiwikClient::IsDisabled ()                     
 { 
@@ -198,7 +210,7 @@ void PiwikClient::SetDisabled (bool v)
 	Disabled = v; 
 }
 
-// DryRun will follow all the tracking steps but will not issue the request to the network
+// DryRun will follow all tracking steps but will not issue any data to the network
 
 bool PiwikClient::IsDryRun ()                     
 { 
@@ -222,7 +234,7 @@ void PiwikClient::SetLogger (wostream* s, PiwikLogLevel lvl)
 // TrackEvent: path (PARAM_URL_PATH) is the only required parameter.
 // Event category, action, name and value are optional.
 
-bool PiwikClient::TrackEvent (LPCTSTR path, LPCTSTR ctg, LPCTSTR act, LPCTSTR nam, float val)
+int PiwikClient::TrackEvent (LPCTSTR path, LPCTSTR ctg, LPCTSTR act, LPCTSTR nam, float val)
 {
 	PiwikState st;
 
@@ -242,7 +254,7 @@ bool PiwikClient::TrackEvent (LPCTSTR path, LPCTSTR ctg, LPCTSTR act, LPCTSTR na
 // TrackTrackScreen: path (PARAM_URL_PATH) is the only required parameter.
 // Up to 5 screen variables can be passed in the position corresponding to the associated index.
 
-bool PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR val1, LPCTSTR nam2, LPCTSTR val2, 
+int PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR val1, LPCTSTR nam2, LPCTSTR val2, 
 		                         LPCTSTR nam3, LPCTSTR val3, LPCTSTR nam4, LPCTSTR val4, LPCTSTR nam5, LPCTSTR val5)
 {
 	PiwikState st;
@@ -267,7 +279,7 @@ bool PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR 
 // TrackGoal: path (PARAM_URL_PATH) is the only required parameter.
 // Goal ID and revenue are optional.
 
-bool PiwikClient::TrackGoal (LPCTSTR path, int goal, float rev)
+int PiwikClient::TrackGoal (LPCTSTR path, int goal, float rev)
 {
 	PiwikState st;
 
@@ -278,9 +290,9 @@ bool PiwikClient::TrackGoal (LPCTSTR path, int goal, float rev)
 	return Track (st);
 }
 
-// TrackOutLink: path will be both the followed link and the PARAM_URL_PATH of the request
+// TrackOutLink: path will be both the followed link and the PARAM_URL_PATH of the request.
 
-bool PiwikClient::TrackOutLink (LPCTSTR path)
+int PiwikClient::TrackOutLink (LPCTSTR path)
 {
 	PiwikState st;
 
@@ -290,7 +302,9 @@ bool PiwikClient::TrackOutLink (LPCTSTR path)
 	return Track (st);
 }
 
-bool PiwikClient::TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target)
+// TrackImpression: all parameters are required.
+
+int PiwikClient::TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target)
 {
 	PiwikState st;
 
@@ -305,7 +319,9 @@ bool PiwikClient::TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece,
 	return Track (st);
 }
 
-bool PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action)
+// TrackInteraction: all parameters are required and should match the ones used for the corresponding impression.
+
+int PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action)
 {
 	PiwikState st;
 
@@ -322,9 +338,11 @@ bool PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece
 	return Track (st);
 }
 
-// Generic tracking routine: can also be called directly with a custom constructed state
+// Generic tracking routine called by all specific tracking methods.
+// Can also be called directly with a custom constructed state to track more complex events.
+// Returns an integer identifier that can be used to query the outcome of the request.
 
-bool PiwikClient::Track (PiwikState& st)
+int PiwikClient::Track (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
 
@@ -367,11 +385,24 @@ bool PiwikClient::Track (PiwikState& st)
 		return Dispatcher.Submit (st); 
 	}
 
-	return false;
+	return 0;
 }
+
+// Flushing will send all pending requests to the server.
+// This will be called implicitly on destruction.
 
 bool PiwikClient::Flush ()
 {
 	return (! Disabled && Dispatcher.Flush ());
+}
+
+// RequestStatus will return a code describing the outcome of a request as follows:
+// - positive if the request was successfully acknowledged by the server
+// - negative if the request failed
+// - zero if the outcome is still unknown
+
+int PiwikClient::RequestStatus (int rqst)
+{
+	return Dispatcher.RequestStatus (rqst);
 }
 

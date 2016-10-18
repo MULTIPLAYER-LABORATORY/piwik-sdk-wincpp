@@ -21,6 +21,7 @@
 #include <process.h>
 #include <string>
 #include <deque>
+#include <vector>
 #include <ostream>
 
 using namespace std;
@@ -30,6 +31,7 @@ class PiwikDispatcher
 private:
 	struct Request
 	{
+		int Serial;
 		wstring Host;
 		wstring Path;
 		PiwikMethod Method;
@@ -47,6 +49,9 @@ private:
 	bool Running;
 
 	std::deque<Request> Requests;
+	std::vector<int> Failures;
+	int SerialNumber;
+	int LastAcknowledged;
 	PiwikLock Mutex;
 	PiwikLogger Logger;
 	HANDLE Service;
@@ -69,8 +74,9 @@ public:
 	void SetDryRun (bool v);
 	void SetLogger (wostream* s, PiwikLogLevel lvl);
 
-	bool Submit (PiwikState& st);
+	int  Submit (PiwikState& st);
 	bool Flush ();
+	int  RequestStatus (int rqst);
 
 private:
 	bool LaunchService ();

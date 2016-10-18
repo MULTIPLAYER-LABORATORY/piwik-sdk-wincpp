@@ -24,6 +24,7 @@ PiwikDispatcher::PiwikDispatcher ()
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
 	DispatchInterval = PIWIK_DISPATCH_INTERVAL; 
 	Secure = DryRun = Synchronous = Running = false; 
+	SerialNumber = LastAcknowledged = 0;
 	Service = Wake = 0;
 	Session = 0;
 }
@@ -117,11 +118,12 @@ void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
 
 // Dispatching
 
-bool PiwikDispatcher::Submit (PiwikState& st)
+int PiwikDispatcher::Submit (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
 	Request itm;
 
+	itm.Serial = ++SerialNumber;
 	itm.Host   = ApiHost;
 	itm.Path   = ApiPath;
 	itm.Method = Method;
@@ -135,14 +137,26 @@ bool PiwikDispatcher::Submit (PiwikState& st)
 	if (Synchronous)
 		Flush ();
 
-	Logger.Debug (L"Submitting query: ", itm.Query.c_str ());
+	Logger.Debug (L"Submitting query: ", itm.Query.c_str (), itm.Serial);
 
-	return (Service != 0); 
+	return itm.Serial; 
 }
 
 bool PiwikDispatcher::Flush ()
 {
 	return (Service && ::SetEvent (Wake));
+}
+
+int PiwikDispatcher::RequestStatus (int rqst)
+{
+	for (size_t i = 0; i < Failures.size (); ++i)
+		if (Failures[i] == rqst)
+			return -1;
+
+	if (LastAcknowledged >= rqst)
+		return 1;
+
+	return 0;
 }
 
 // Internals
@@ -183,6 +197,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 	Request itm;
 	string msg;
 	int cnt, avl;
+	bool vld;
 
 	while (dsp && dsp->Running)
 	{
@@ -193,19 +208,24 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			dsp->Mutex.Activate ();
 			itm = dsp->Requests.front ();
 			dsp->Requests.pop_front ();
-			cnt++;
 			avl = dsp->Requests.size ();
 			dsp->Mutex.Release ();
 
 			if (itm.Method == PIWIK_METHOD_GET)
-				dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
+				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
 			else
 			{
 				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : ",") + itm.Query;
-				if (cnt >= PIWIK_POST_BUNDLE || ! avl)
-					if (dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}"))
-						cnt = 0, msg.clear ();
+				if (++cnt < PIWIK_POST_BUNDLE && avl)
+					continue;
+				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}");
+				cnt = 0, msg.clear ();
 			}
+
+			if (vld)
+				dsp->LastAcknowledged = itm.Serial;
+			else
+				dsp->Failures.push_back (itm.Serial);
 		}
 	}
 

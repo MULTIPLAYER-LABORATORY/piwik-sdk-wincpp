@@ -72,14 +72,15 @@ public:
 	void SetDryRun (bool v);
 	void SetLogger (wostream* s, PiwikLogLevel lvl = PIWIK_INITIAL_LOG_LEVEL);
 
-	bool TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0);
-	bool TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
+	int  TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0);
+	int  TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
 		              LPCTSTR nam3 = 0, LPCTSTR val3 = 0, LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0);
-	bool TrackGoal (LPCTSTR path, int goal, float rev = 0);
-	bool TrackOutLink (LPCTSTR path);
-	bool TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target);
-	bool TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action);
+	int  TrackGoal (LPCTSTR path, int goal, float rev = 0);
+	int  TrackOutLink (LPCTSTR path);
+	int  TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target);
+	int  TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action);
 
-	bool Track (PiwikState& st);
+	int  Track (PiwikState& st);
 	bool Flush ();
+	int  RequestStatus (int rqst);
 };
