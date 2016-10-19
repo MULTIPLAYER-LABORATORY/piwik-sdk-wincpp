@@ -143,9 +143,9 @@ These are the entry points provided by the Piwik tracking library:
 
 3. Tracking
 
-	Following calls can be used to track specific behavior:
+	Following calls can be used to track standard situations. They all return on success a positive identifier that can be used later to query the outcome of the request.
 	
-	``bool TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0)``
+	``int TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0)``
 	
 	Parameters:
 		
@@ -156,9 +156,9 @@ These are the entry points provided by the Piwik tracking library:
 	``val``: the numeric value associated with this property
 		
 	```	
-	bool TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, 
-                     LPCTSTR nam2 = 0, LPCTSTR val2 = 0, LPCTSTR nam3 = 0, LPCTSTR val3 = 0, 
-                     LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0)
+	int TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, 
+                    LPCTSTR nam2 = 0, LPCTSTR val2 = 0, LPCTSTR nam3 = 0, LPCTSTR val3 = 0, 
+                    LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0)
 	```
 	Parameters:
 		
@@ -169,7 +169,7 @@ These are the entry points provided by the Piwik tracking library:
 		
 	Local variables should keep always the same position within this set in order to be correctly tracked. When sending these values to the server they will be assigned to the slot corresponding to the positional parameter being used. Any unneeded slots can be filled with NULL.
 		
-	``bool TrackGoal (LPCTSTR path, int goal, float rev = 0)``
+	``int TrackGoal (LPCTSTR path, int goal, float rev = 0)``
 	
 	Parameters:
 	
@@ -177,13 +177,13 @@ These are the entry points provided by the Piwik tracking library:
 	``goal``: the numeric identifier of the goal being tracked
 	``rev``: the amount indicating the revenue corresponding to this goal
 		
-	``bool TrackOutLink (LPCTSTR path)``
+	``int TrackOutLink (LPCTSTR path)``
 	
 	Parameters:
 		
 	``path``: the URL of the followed link (required)
 		
-	``bool TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target)``
+	``int TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target)``
 	
 	Parameters:
 		
@@ -192,7 +192,7 @@ These are the entry points provided by the Piwik tracking library:
 	``piece``: the specific piece within this content
 	``target``: the target associated with this content
 		
-	``bool TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action)``
+	``int TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target, LPCTSTR action)``
 	
 	Parameters:
 		
@@ -202,7 +202,7 @@ These are the entry points provided by the Piwik tracking library:
 	``target``: the target associated with this content
 	``action``: the specific action being tracked
 		
-	To track complex situations a ``PiwikState`` can be explicitly constructed and any of its fields may be specified:
+	To track more complex situations a ``PiwikState`` can be explicitly constructed and provided as such:
 		
 	``bool Track (PiwikState& st)``
 	
@@ -236,5 +236,8 @@ These are the entry points provided by the Piwik tracking library:
 	``bool Flush ()``
 	
 	Allows to send all pending requests to the server. This is called implicitly when closing the Piwik instance.
-		
 	
+	``int  RequestStatus (int rqst, int wait = 0);``
+	
+	Allows to query the outcome of a tracking request based on the identifier provided by the tracking call. A positive integer indicates success while a negative one indicates failure. Zero will be returned while the status is still unknown, and a timeout in seconds can be provided to instruct the function to wait for a defined state if necessary.
+

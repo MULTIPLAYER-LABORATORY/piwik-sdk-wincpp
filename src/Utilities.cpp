@@ -17,7 +17,8 @@
 // PiwikVariableSet
 
 // Find the best index for a user specified variable:
-// first lookup a variable with the same name, otherwise look for a free slot or take the last one.
+// first lookup a variable with the same name and take the same slot if found, 
+// otherwise look for a free slot or take the last one.
 
 int PiwikVariableSet::GetIndex (LPCTSTR nam)
 {

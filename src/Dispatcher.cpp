@@ -149,6 +149,8 @@ bool PiwikDispatcher::Flush ()
 
 int PiwikDispatcher::RequestStatus (int rqst)
 {
+	PiwikScopedLock lck (Mutex);
+
 	for (size_t i = 0; i < Failures.size (); ++i)
 		if (Failures[i] == rqst)
 			return -1;
@@ -160,6 +162,8 @@ int PiwikDispatcher::RequestStatus (int rqst)
 }
 
 // Internals
+
+// This function will launch the dispatching thread and create all its required resources
 
 bool PiwikDispatcher::LaunchService ()
 {
@@ -174,6 +178,8 @@ bool PiwikDispatcher::LaunchService ()
 	Logger.Error (L"Could not launch Piwik dispatch service");
 	return false;
 }
+
+// This function will stop the dispatching thread and delete all associated resources
 
 void PiwikDispatcher::ShutdownService ()
 {
@@ -191,11 +197,14 @@ void PiwikDispatcher::ShutdownService ()
 		WinHttpCloseHandle (Session), Session = 0;
 }
 
+// Main dispatching routine run in the service thread
+
 unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 {
 	PiwikDispatcher* dsp = (PiwikDispatcher*) arg;
 	Request itm;
 	string msg;
+	int grp[PIWIK_POST_BUNDLE];
 	int cnt, avl;
 	bool vld;
 
@@ -211,21 +220,29 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			avl = dsp->Requests.size ();
 			dsp->Mutex.Release ();
 
+			grp[cnt++] = itm.Serial;
+
 			if (itm.Method == PIWIK_METHOD_GET)
 				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
 			else
 			{
 				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : ",") + itm.Query;
-				if (++cnt < PIWIK_POST_BUNDLE && avl)
+				if (cnt < PIWIK_POST_BUNDLE && avl)
 					continue;
 				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}");
-				cnt = 0, msg.clear ();
 			}
 
 			if (vld)
 				dsp->LastAcknowledged = itm.Serial;
 			else
-				dsp->Failures.push_back (itm.Serial);
+			{
+				dsp->Mutex.Activate ();
+				for (int i = 0; i < cnt; ++i)
+					dsp->Failures.push_back (grp[i]);
+				dsp->Mutex.Release ();
+			}
+
+			cnt = 0, msg.clear ();
 		}
 	}
 
@@ -238,8 +255,10 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 	HINTERNET Connection = 0, Request = 0;
 	wchar_t* verb;
 	void* data;
-	int size;
-	BOOL rsl = 0;
+	DWORD size;
+	DWORD code = 0;
+	int rsl;
+	bool vld;
 
 	if (DryRun)
 	{
@@ -270,7 +289,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 									WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
 	if (! Request)
 	{
-		Logger.Error (L"Could not create HTTP request to path", 0, GetLastError ());
+		Logger.Error (L"Could not create HTTP request", 0, GetLastError ());
 		::WinHttpCloseHandle (Connection);
 		return false;
 	}
@@ -279,20 +298,31 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 	if (! rsl)
 	{
 		Logger.Error (L"Could not send HTTP request", 0, GetLastError ());
+		::WinHttpCloseHandle (Request);
+		::WinHttpCloseHandle (Connection);
+		return false;
 	}
-	else
+
+	rsl = ::WinHttpReceiveResponse (Request, 0) && ::WinHttpQueryHeaders (Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
+				                                                          WINHTTP_HEADER_NAME_BY_INDEX, &code, &(size = sizeof code), WINHTTP_NO_HEADER_INDEX);
+	if (rsl && code / 100 == 2)
 	{
-		rsl = ::WinHttpReceiveResponse (Request, 0);
 		#ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
 			ReadResponse (Request);
 		#endif
 		Logger.Debug (L"Sent HTTP request: ", qry.c_str ());
+		vld = true;
+	}
+	else
+	{
+		Logger.Error (L"Unexpected HTTP response", 0, code);
+		vld = false;
 	}
 
 	::WinHttpCloseHandle (Request);
 	::WinHttpCloseHandle (Connection);
 	
-	return (rsl == TRUE);
+	return vld;
 }
 
 void PiwikDispatcher::ReadResponse (HINTERNET rqst)

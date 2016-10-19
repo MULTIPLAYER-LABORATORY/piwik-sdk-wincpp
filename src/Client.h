@@ -82,5 +82,5 @@ public:
 
 	int  Track (PiwikState& st);
 	bool Flush ();
-	int  RequestStatus (int rqst);
+	int  RequestStatus (int rqst, int wait = 0);
 };

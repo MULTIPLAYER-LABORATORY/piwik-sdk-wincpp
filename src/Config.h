@@ -35,3 +35,7 @@
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0501
 #endif
+
+// If the Piwik server is in debug mode the network module will read the information responses
+
+#undef PIWIK_SERVER_IS_IN_DEBUG_MODE

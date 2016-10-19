@@ -396,13 +396,26 @@ bool PiwikClient::Flush ()
 	return (! Disabled && Dispatcher.Flush ());
 }
 
-// RequestStatus will return a code describing the outcome of a request as follows:
+// RequestStatus will return a code describing the outcome of a previous request as follows:
 // - positive if the request was successfully acknowledged by the server
 // - negative if the request failed
 // - zero if the outcome is still unknown
+// If a timeout is specified, the function will retry if necessary that many seconds.
 
-int PiwikClient::RequestStatus (int rqst)
+int PiwikClient::RequestStatus (int rqst, int wait)
 {
-	return Dispatcher.RequestStatus (rqst);
+	time_t t = time (0);
+	int vld = 0;
+
+	while (1)
+	{
+		vld = Dispatcher.RequestStatus (rqst);
+		if (! vld && wait > 0 && time (0) - t < (wait & 0x3F))
+			Sleep (250);
+		else
+			break;
+	}
+
+	return vld;
 }
 
