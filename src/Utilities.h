@@ -131,6 +131,7 @@ public:
 string   ToUTF8 (wstring& src);
 wstring  ToWide (string& src);
 string   PercentEncode (string& src);
+string   JsonEncode (string& src);
 TSTRING  MakeHexDigest (TSTRING& src, int lng);
 TSTRING  GetScreenResolution ();
 bool     ComposeUrl (TSTRING& prf, TSTRING& url);

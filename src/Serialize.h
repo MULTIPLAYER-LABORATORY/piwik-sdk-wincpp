@@ -37,7 +37,7 @@ public:
 	char*  Prefix ()           { if (Format == PIWIK_FORMAT_URL) return (! Items ? "?" : "&"); return (! Items ? "{" QUOTES : "," QUOTES); }
 	char*  Assign ()           { if (Format == PIWIK_FORMAT_URL) return "="; return QUOTES ":"; }
 	char*  Quotes ()           { if (Format == PIWIK_FORMAT_URL) return ""; return QUOTES; }
-	string Encode (string& s)  { if (Format == PIWIK_FORMAT_URL) return PercentEncode (s); return s; }
+	string Encode (string& s)  { if (Format == PIWIK_FORMAT_URL) return PercentEncode (s); return JsonEncode (s); }
 	string Result ()           { return this->str () + (Format == PIWIK_FORMAT_URL ? "" : (Items ? "}" : "{}")); }
 };
 

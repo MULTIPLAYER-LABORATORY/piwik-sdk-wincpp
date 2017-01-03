@@ -150,6 +150,52 @@ string PercentEncode (string& src)
     return os.str ();
 }
 
+string JsonEncode (string& src)
+{
+    ostringstream os;
+	char hex[32];
+
+    for (string::const_iterator i = src.begin (), n = src.end (); i != n; ++i) 
+	{
+        unsigned char c = (*i);
+		switch (c) 
+		{
+		case '\\':
+		case '"':
+		case '/':
+			os << '\\' << c;
+			break;
+		case '\b':
+			os << "\\b";
+			break;
+		case '\t':
+			os << "\\t";
+			break;
+		case '\n':
+			os << "\\n";
+			break;
+		case '\f':
+			os << "\\f";
+			break;
+		case '\r':
+			os << "\\r";
+			break;
+		default:
+			if (c < ' ') 
+			{
+				sprintf_s (hex, "%04x", c);
+				os << "\\u" << hex;
+			} 
+			else 
+			{
+				os << c;
+			}
+		}
+	}
+
+    return os.str ();
+}
+
 TSTRING MakeHexDigest (TSTRING& src, int lng)
 {
 	#define MD5LEN  16
