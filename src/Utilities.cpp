@@ -212,13 +212,13 @@ TSTRING MakeHexDigest (TSTRING& src, int lng)
 
 	// Need some data to digest
 	if (enc.length () < 4)
-		return false;
+		enc += "****";
 	
 	// Get handle to the crypto provider
 	if (! ::CryptAcquireContext (&hProv, 0, 0, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
 	{
 		stt = ::GetLastError();
-		return false;
+		return trg;
 	}
 
 	// Create build object
@@ -226,7 +226,7 @@ TSTRING MakeHexDigest (TSTRING& src, int lng)
 	{
 		stt = ::GetLastError();
 		::CryptReleaseContext (hProv, 0);
-		return false;
+		return trg;
 	}
 
 	// Insert source data
@@ -235,7 +235,7 @@ TSTRING MakeHexDigest (TSTRING& src, int lng)
 		stt = ::GetLastError();
 		::CryptDestroyHash (hHash);
 		::CryptReleaseContext (hProv, 0);
-		return false;
+		return trg;
 	}
 
 	// Extract digest
@@ -244,7 +244,7 @@ TSTRING MakeHexDigest (TSTRING& src, int lng)
 		stt = ::GetLastError();
 		::CryptDestroyHash (hHash);
 		::CryptReleaseContext (hProv, 0);
-		return false;
+		return trg;
 	}
 
 	for (DWORD i = 0; i < cnt; i++)

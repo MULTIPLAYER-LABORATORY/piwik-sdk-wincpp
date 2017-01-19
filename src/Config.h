@@ -26,6 +26,7 @@
 #define PIWIK_SESSION_TIMEOUT      (30 * 60)  // sec before restarting a client session
 #define PIWIK_CONNECTION_TIMEOUT   5          // sec while trying to establish a connection
 #define PIWIK_DISPATCH_INTERVAL    (2 * 60)   // sec between API requests
+#define PIWIK_SHUTDOWN_WAIT        10         // sec waiting for last pending requests to be sent
 #define PIWIK_POST_BUNDLE          20         // number of queries sent together in one POST request
 #define PIWIK_RECORDING_VALUE      1          // rec parameter value
 #define PIWIK_SEND_IMAGE           0          // send_image parameter value
@@ -38,4 +39,4 @@
 
 // If the Piwik server is in debug mode the network module will read the information responses
 
-#undef PIWIK_SERVER_IS_IN_DEBUG_MODE
+#define PIWIK_SERVER_IS_IN_DEBUG_MODE

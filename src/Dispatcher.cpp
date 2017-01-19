@@ -184,10 +184,11 @@ bool PiwikDispatcher::LaunchService ()
 void PiwikDispatcher::ShutdownService ()
 {
 	Logger.Info (L"Terminating Piwik dispatch service");
+	time_t t = time (0) + 5;
 
 	Running = false;
 	Flush ();
-	if (Service && ::WaitForSingleObject (Service, 5000) != WAIT_OBJECT_0)
+	if (Service && ::WaitForSingleObject (Service, PIWIK_SHUTDOWN_WAIT * 1000) != WAIT_OBJECT_0)
 		::TerminateThread (Service, -1);
 	if (Service)
 		CloseHandle (Service), Service = 0;
