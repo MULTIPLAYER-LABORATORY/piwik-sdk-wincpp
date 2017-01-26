@@ -184,10 +184,10 @@ bool PiwikDispatcher::LaunchService ()
 void PiwikDispatcher::ShutdownService ()
 {
 	Logger.Info (L"Terminating Piwik dispatch service");
-	time_t t = time (0) + 5;
 
 	Running = false;
 	Flush ();
+	Sleep (250); // seems to be required if service has been recently launched
 	if (Service && ::WaitForSingleObject (Service, PIWIK_SHUTDOWN_WAIT * 1000) != WAIT_OBJECT_0)
 		::TerminateThread (Service, -1);
 	if (Service)
@@ -258,6 +258,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 	void* data;
 	DWORD size;
 	DWORD code = 0;
+	DWORD opts;
 	int rsl;
 	bool vld;
 
@@ -294,6 +295,9 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 		::WinHttpCloseHandle (Connection);
 		return false;
 	}
+	
+	opts = SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+	::WinHttpSetOption (Request, WINHTTP_OPTION_SECURITY_FLAGS, &opts, sizeof opts);
 
 	rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
 	if (! rsl)
@@ -304,8 +308,9 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
 		return false;
 	}
 
-	rsl = ::WinHttpReceiveResponse (Request, 0) && ::WinHttpQueryHeaders (Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
-				                                                          WINHTTP_HEADER_NAME_BY_INDEX, &code, &(size = sizeof code), WINHTTP_NO_HEADER_INDEX);
+	rsl = ::WinHttpReceiveResponse (Request, 0) && 
+		  ::WinHttpQueryHeaders (Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
+				                          WINHTTP_HEADER_NAME_BY_INDEX, &code, &(size = sizeof code), WINHTTP_NO_HEADER_INDEX);
 	if (rsl && code / 100 == 2)
 	{
 		#ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
