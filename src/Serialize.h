@@ -59,12 +59,24 @@ template <> void PiwikQueryBuilder::AddParameter<PiwikVariableSet> (LPCSTR nam, 
 {
 	int n = 0;
 
-	*this << Prefix () << nam << Assign () << "{";
-	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
-		if (val.Items[i].IsValid ())
-			*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << Encode (UTF8_STRING (val.Items[i].Name)) <<
-			         QUOTES << "," << QUOTES << Encode (UTF8_STRING (val.Items[i].Value)) << QUOTES << "]";
-	*this << "}";
-	Items++;
+	if (Format == PIWIK_FORMAT_URL)
+	{
+		*this << Prefix() << nam << "={";
+		for (int i = 0; i < ARRAY_COUNT(val.Items); i++)
+			if (val.Items[i].IsValid())
+				*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << Encode(UTF8_STRING(val.Items[i].Name)) <<
+				QUOTES << "," << QUOTES << Encode(UTF8_STRING(val.Items[i].Value)) << QUOTES << "]";
+		*this << "}";
+		Items++;
+	}
+	else  // variables object must be enclosed within a string, as this the only data type that the Piwik JSON parser understands (as of version 3.2.0)
+	{
+		*this << Prefix() << nam << "\":\"{";
+		for (int i = 0; i < ARRAY_COUNT(val.Items); i++)
+			if (val.Items[i].IsValid())
+				*this << (n++ > 0 ? "," : "") << "\\\"" << (i + 1) << "\\\":[\\\"" << Encode(UTF8_STRING(val.Items[i].Name)) <<
+				"\\\",\\\"" << Encode(UTF8_STRING(val.Items[i].Value)) << "\\\"]";
+		*this << "}\"";
+		Items++;
+	}
 }
-
