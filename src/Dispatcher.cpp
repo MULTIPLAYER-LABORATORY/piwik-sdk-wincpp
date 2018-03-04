@@ -227,7 +227,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
 			else
 			{
-				msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[" : ",") + itm.Query;
+                msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[\"" : ",\"") + itm.Query + QUOTES;
 				if (cnt < PIWIK_POST_BUNDLE && avl)
 					continue;
 				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}");

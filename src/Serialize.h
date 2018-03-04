@@ -34,11 +34,11 @@ public:
 	template <> void AddParameter<TSTRING> (LPCSTR nam, TSTRING val);
 	template <> void AddParameter<PiwikVariableSet> (LPCSTR nam, PiwikVariableSet val);
 
-	char*  Prefix ()           { if (Format == PIWIK_FORMAT_URL) return (! Items ? "?" : "&"); return (! Items ? "{" QUOTES : "," QUOTES); }
-	char*  Assign ()           { if (Format == PIWIK_FORMAT_URL) return "="; return QUOTES ":"; }
-	char*  Quotes ()           { if (Format == PIWIK_FORMAT_URL) return ""; return QUOTES; }
+    char*  Prefix ()           {  return (! Items ? "?" : "&"); }
+	char*  Assign ()           { return "="; }
+	char*  Quotes ()           { if (Format == PIWIK_FORMAT_URL) return QUOTES; return "\\" QUOTES; }
 	string Encode (string& s)  { if (Format == PIWIK_FORMAT_URL) return PercentEncode (s); return JsonEncode (s); }
-	string Result ()           { return this->str () + (Format == PIWIK_FORMAT_URL ? "" : (Items ? "}" : "{}")); }
+    string Result ()           { return this->str () ; }
 };
 
 // Externals
@@ -51,7 +51,7 @@ template <typename T> void PiwikQueryBuilder::AddParameter (LPCSTR nam, T val)
 
 template <> void PiwikQueryBuilder::AddParameter<TSTRING> (LPCSTR nam, TSTRING val)
 {
-	*this << Prefix () << nam << Assign () << Quotes () << Encode (UTF8_STRING (val)) << Quotes ();
+    *this << Prefix () << nam << Assign () << Encode (UTF8_STRING (val));
 	Items++;
 }
 
@@ -59,24 +59,12 @@ template <> void PiwikQueryBuilder::AddParameter<PiwikVariableSet> (LPCSTR nam, 
 {
 	int n = 0;
 
-	if (Format == PIWIK_FORMAT_URL)
-	{
-		*this << Prefix() << nam << "={";
-		for (int i = 0; i < ARRAY_COUNT(val.Items); i++)
-			if (val.Items[i].IsValid())
-				*this << (n++ > 0 ? "," : "") << QUOTES << (i + 1) << QUOTES << ":[" << QUOTES << Encode(UTF8_STRING(val.Items[i].Name)) <<
-				QUOTES << "," << QUOTES << Encode(UTF8_STRING(val.Items[i].Value)) << QUOTES << "]";
-		*this << "}";
-		Items++;
-	}
-	else  // variables object must be enclosed within a string, as this the only data type that the Piwik JSON parser understands (as of version 3.2.0)
-	{
-		*this << Prefix() << nam << "\":\"{";
-		for (int i = 0; i < ARRAY_COUNT(val.Items); i++)
-			if (val.Items[i].IsValid())
-				*this << (n++ > 0 ? "," : "") << "\\\"" << (i + 1) << "\\\":[\\\"" << Encode(UTF8_STRING(val.Items[i].Name)) <<
-				"\\\",\\\"" << Encode(UTF8_STRING(val.Items[i].Value)) << "\\\"]";
-		*this << "}\"";
-		Items++;
-	}
+	*this << Prefix () << nam << Assign () << "{";
+	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+		if (val.Items[i].IsValid ())
+			*this << (n++ > 0 ? "," : "") << Quotes () << (i + 1) << Quotes () << ":[" << Quotes () << Encode (UTF8_STRING (val.Items[i].Name)) <<
+			            Quotes () << "," << Quotes () << Encode (UTF8_STRING (val.Items[i].Value)) << Quotes () << "]";
+	*this << "}";
+	Items++;
 }
+
