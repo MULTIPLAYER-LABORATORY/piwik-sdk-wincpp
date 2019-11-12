@@ -46,6 +46,57 @@ bool PiwikVariableSet::IsValid ()
 	return false; 
 }
 
+int PiwikDimensionsSet::GetIndex (LPCTSTR nam)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_COUNT (Items); i++)
+		if (Items[i].Name == nam)
+			break;
+	if (i >= ARRAY_COUNT (Items))
+		for (i = 0; i < ARRAY_COUNT (Items); i++)
+			if (! Items[i].IsValid ())
+				break;
+	if (i >= ARRAY_COUNT (Items))
+		i = ARRAY_COUNT (Items) - 1;
+
+	return i;
+}
+
+bool PiwikDimensionsSet::IsValid ()   
+{ 
+	for (int i = 0; i < ARRAY_COUNT (Items); i++) 
+		if (Items[i].IsValid ()) 
+			return true; 
+	
+	return false; 
+}
+
+int PiwikVisitDimensionsSet::GetIndex (LPCTSTR nam)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_COUNT (Items); i++)
+		if (Items[i].Name == nam)
+			break;
+	if (i >= ARRAY_COUNT (Items))
+		for (i = 0; i < ARRAY_COUNT (Items); i++)
+			if (! Items[i].IsValid ())
+				break;
+	if (i >= ARRAY_COUNT (Items))
+		i = ARRAY_COUNT (Items) - 1;
+
+	return i;
+}
+
+bool PiwikVisitDimensionsSet::IsValid ()   
+{ 
+	for (int i = 0; i < ARRAY_COUNT (Items); i++) 
+		if (Items[i].IsValid ()) 
+			return true; 
+	
+	return false; 
+}
 // PiwikLogger
 
 void PiwikLogger::Log (LPCWSTR msg, LPCSTR data, int code, int lvl)

@@ -71,10 +71,15 @@ public:
 	bool IsDryRun ();
 	void SetDryRun (bool v);
 	void SetLogger (wostream* s, PiwikLogLevel lvl = PIWIK_INITIAL_LOG_LEVEL);
+    void SetVisitDimensions (int nDimensionNum, ...);
 
 	int  TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0);
-	int  TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
-		              LPCTSTR nam3 = 0, LPCTSTR val3 = 0, LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0);
+	int  TrackScreen (LPCTSTR path, LPCTSTR act = 0, int amountOfTime = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
+		              LPCTSTR nam3 = 0, LPCTSTR val3 = 0, LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0,
+                      LPCTSTR nam6 = 0, LPCTSTR val6 = 0, LPCTSTR nam7 = 0, LPCTSTR val7 = 0, LPCTSTR nam8 = 0, LPCTSTR val8 = 0);
+
+    int TrackAction( LPCTSTR path, LPCTSTR act, int amountOfTime, int nDimensionNum, ... );
+
 	int  TrackGoal (LPCTSTR path, int goal, float rev = 0);
 	int  TrackOutLink (LPCTSTR path);
 	int  TrackImpression (LPCTSTR path, LPCTSTR content, LPCTSTR piece, LPCTSTR target);

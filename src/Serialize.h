@@ -33,6 +33,8 @@ public:
 	template <typename T> void AddParameter (LPCSTR nam, T val);
 	template <> void AddParameter<TSTRING> (LPCSTR nam, TSTRING val);
 	template <> void AddParameter<PiwikVariableSet> (LPCSTR nam, PiwikVariableSet val);
+    void AddDimension(PiwikDimensionsSet val);
+    void AddDimension(PiwikVisitDimensionsSet val);
 
     char*  Prefix ()           {  return (! Items ? "?" : "&"); }
 	char*  Assign ()           { return "="; }
@@ -68,3 +70,26 @@ template <> void PiwikQueryBuilder::AddParameter<PiwikVariableSet> (LPCSTR nam, 
 	Items++;
 }
 
+void PiwikQueryBuilder::AddDimension(PiwikDimensionsSet val)
+{
+    for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+    {
+        if (val.Items[i].IsValid ())
+        {
+            *this << Prefix () << UTF8_STRING(val.Items[i].Name) << Assign () << Quotes () << Encode (UTF8_STRING (val.Items[i].Value)) << Quotes ();
+        }
+    }
+    Items++;
+}
+
+void PiwikQueryBuilder::AddDimension(PiwikVisitDimensionsSet val)
+{
+    for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+    {
+        if (val.Items[i].IsValid ())
+        {
+            *this << Prefix () << UTF8_STRING(val.Items[i].Name) << Assign () <<  Encode (UTF8_STRING (val.Items[i].Value)) ;
+        }
+    }
+    Items++;
+}

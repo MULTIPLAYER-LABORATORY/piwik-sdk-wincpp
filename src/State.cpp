@@ -55,6 +55,8 @@ string PiwikState::Serialize (PiwikQueryFormat frmt)
 		qb.AddParameter (PARAM_GOAL_ID, Goal);
 	if (Revenue)
 		qb.AddParameter (PARAM_REVENUE, Revenue);
+    if (AmountOfTime)
+		qb.AddParameter (PARAM_AMOUNT_OF_TIME, AmountOfTime);
 	if (! OutLink.empty ())
 		qb.AddParameter (PARAM_LINK, OutLink);
 	if (! ContentName.empty ())
@@ -77,6 +79,16 @@ string PiwikState::Serialize (PiwikQueryFormat frmt)
 		qb.AddParameter (PARAM_VISIT_SCOPE_CUSTOM_VARIABLES, UserVariables); 
 	if (ScreenVariables.IsValid ())
 		qb.AddParameter (PARAM_SCREEN_SCOPE_CUSTOM_VARIABLES, ScreenVariables);
+
+    if (DimensionVariables.IsValid ())
+    {
+        qb.AddDimension(DimensionVariables);
+    }
+
+    if (VistDimensionVariables.IsValid ())
+    {
+        qb.AddDimension(VistDimensionVariables);
+    }
 
 	return qb.Result ();
 }

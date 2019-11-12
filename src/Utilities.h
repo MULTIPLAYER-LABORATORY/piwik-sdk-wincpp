@@ -84,6 +84,25 @@ struct PiwikVariableSet
 	bool IsValid ();
 };
 
+
+struct PiwikDimensionsSet
+{
+	PiwikVariable Items[PIWIK_DISMENSION_VARIABLES];
+
+	int  GetIndex (LPCTSTR nam);
+	bool IsValid ();
+};
+
+struct PiwikVisitDimensionsSet
+{
+	PiwikVariable Items[PIWIK_VISIT_DISMENSION_VARIABLES];
+
+	int  GetIndex (LPCTSTR nam);
+	bool IsValid ();
+};
+
+
+
 class PiwikLock
 {
 private:

@@ -31,11 +31,14 @@ struct PiwikBasicState
 	TSTRING Language;
 	TSTRING ScreenRes;
 	PiwikVariableSet UserVariables;
+    PiwikVisitDimensionsSet VistDimensionVariables;
 	int Recording;
 	int ReturnImage;
 
-	PiwikBasicState ()    { SiteId = 0; ApiVersion = PIWIK_API_VERSION; UserAgent = PIWIK_USER_AGENT; 
-	                        Recording = PIWIK_RECORDING_VALUE; ReturnImage = PIWIK_SEND_IMAGE; }
+	PiwikBasicState () : SiteId(0), ApiVersion(PIWIK_API_VERSION), UserAgent(PIWIK_USER_AGENT), 
+                         Recording(PIWIK_RECORDING_VALUE), ReturnImage(PIWIK_SEND_IMAGE)
+    { 
+    }
 };
 
 struct PiwikState : public PiwikBasicState
@@ -54,14 +57,18 @@ struct PiwikState : public PiwikBasicState
 	TSTRING ContentTarget;
 	TSTRING ContentInteraction;
 	PiwikVariableSet ScreenVariables;
+    PiwikDimensionsSet DimensionVariables;
 	int NewSession;
 	int VisitCount;
 	time_t FirstVisit;
 	time_t LastVisit;
 	int Random;
+    int AmountOfTime;
 
-	PiwikState ()      { NewSession = 0; VisitCount = 0; FirstVisit = LastVisit = 0; EventValue = 0; 
-	                     Goal = 0; Revenue = 0; Random = 0; }
+	PiwikState (): NewSession(0), VisitCount(0), FirstVisit(0), LastVisit(0), 
+                   EventValue(0), Goal(0), Revenue(0), Random(0), AmountOfTime(0)
+    {
+    }
 								
 	string Serialize (PiwikQueryFormat frmt);
 };

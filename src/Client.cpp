@@ -254,14 +254,17 @@ int PiwikClient::TrackEvent (LPCTSTR path, LPCTSTR ctg, LPCTSTR act, LPCTSTR nam
 // TrackTrackScreen: path (PARAM_URL_PATH) is the only required parameter.
 // Up to 5 screen variables can be passed in the position corresponding to the associated index.
 
-int PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR val1, LPCTSTR nam2, LPCTSTR val2, 
-		                         LPCTSTR nam3, LPCTSTR val3, LPCTSTR nam4, LPCTSTR val4, LPCTSTR nam5, LPCTSTR val5)
+int PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, int amountOfTime, LPCTSTR nam1, LPCTSTR val1, LPCTSTR nam2, LPCTSTR val2, 
+		                         LPCTSTR nam3, LPCTSTR val3, LPCTSTR nam4, LPCTSTR val4, LPCTSTR nam5, LPCTSTR val5,
+                                 LPCTSTR nam6, LPCTSTR val6, LPCTSTR nam7, LPCTSTR val7, LPCTSTR nam8, LPCTSTR val8 )
 {
 	PiwikState st;
 
 	st.TrackedPath = path;
 	if (act)
 		st.TrackedAction = act;
+    if (amountOfTime > 0 )
+        st.AmountOfTime = amountOfTime * 1000;
 	if (nam1 && val1)
 		st.ScreenVariables.Items[0].Set (nam1, val1);
 	if (nam2 && val2)
@@ -272,8 +275,58 @@ int PiwikClient::TrackScreen (LPCTSTR path, LPCTSTR act, LPCTSTR nam1, LPCTSTR v
 		st.ScreenVariables.Items[3].Set (nam4, val4);
 	if (nam5 && val5)
 		st.ScreenVariables.Items[4].Set (nam5, val5);
+    if (nam6 && val6)
+		st.ScreenVariables.Items[5].Set (nam6, val6);
+    if (nam7 && val7)
+		st.ScreenVariables.Items[6].Set (nam7, val7);
+    if (nam8 && val8)
+		st.ScreenVariables.Items[7].Set (nam8, val8);
 
 	return Track (st);
+}
+
+void PiwikClient::SetVisitDimensions (int nDimensionNum, ...)
+{
+    va_list DimensionList;
+    va_start(DimensionList, nDimensionNum);
+
+    int nMin = min(nDimensionNum, PIWIK_VISIT_DISMENSION_VARIABLES);
+    for(int i = 0; i < nMin ; i++)
+    {
+        LPCTSTR strName  = va_arg(DimensionList, LPCTSTR);
+        LPCTSTR strValue = va_arg(DimensionList, LPCTSTR);
+
+        State.VistDimensionVariables.Items[i].Set(strName, strValue);
+    }
+
+    va_end(DimensionList);
+}
+
+int PiwikClient::TrackAction( LPCTSTR path, LPCTSTR act, int amountOfTime, int nDimensionNum, ... )
+{
+	PiwikState st;
+
+	st.TrackedPath = path;
+	st.TrackedAction = act;
+
+    if (amountOfTime > 0 )
+        st.AmountOfTime = amountOfTime * 1000;
+
+    va_list DimensionList;
+    va_start(DimensionList, nDimensionNum);
+
+    int nMin = min(nDimensionNum, PIWIK_DISMENSION_VARIABLES);
+    for(int i = 0; i < nMin ; i++)
+    {
+        LPCTSTR strName  = va_arg(DimensionList, LPCTSTR);
+        LPCTSTR strValue = va_arg(DimensionList, LPCTSTR);
+
+        st.DimensionVariables.Items[i].Set (strName, strValue);
+    }
+
+    va_end(DimensionList);
+
+    return Track (st);
 }
 
 // TrackGoal: path (PARAM_URL_PATH) is the only required parameter.
@@ -378,6 +431,7 @@ int PiwikClient::Track (PiwikState& st)
 		st.VisitorId = State.VisitorId;
 		st.ApiVersion = State.ApiVersion;
 		st.UserVariables = State.UserVariables;
+        st.VistDimensionVariables = State.VistDimensionVariables;
 		st.Recording = State.Recording;
 		st.ReturnImage = State.ReturnImage;
 		st.Random = rand ();

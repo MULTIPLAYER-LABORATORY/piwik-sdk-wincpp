@@ -143,6 +143,10 @@
 // Only used if GOAL_ID is specified in the request.
 #define PARAM_REVENUE   "revenue"
 
+// The amount of time it took the server to generate this action, in milliseconds
+// This value is used to process the Page speed report Avg. generation time column.
+#define PARAM_AMOUNT_OF_TIME   "gt_ms"
+
 // 32 character authorization key used to authenticate the API request.
 // deprecated due to security concerns.
 #define PARAM_AUTHENTICATION_TOKEN   "token_auth"

@@ -19,6 +19,7 @@
 // Configuration
 
 PiwikDispatcher::PiwikDispatcher ()
+: Session(0)
 {
 	Method = PIWIK_BASIC_METHOD; 
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
@@ -26,7 +27,6 @@ PiwikDispatcher::PiwikDispatcher ()
 	Secure = DryRun = Synchronous = Running = false; 
 	SerialNumber = LastAcknowledged = 0;
 	Service = Wake = 0;
-	Session = 0;
 }
 
 PiwikDispatcher::~PiwikDispatcher ()
@@ -183,7 +183,8 @@ bool PiwikDispatcher::LaunchService ()
 
 void PiwikDispatcher::ShutdownService ()
 {
-	Logger.Info (L"Terminating Piwik dispatch service");
+	//the following code causing a crash TBD
+	//Logger.Info (L"Terminating Piwik dispatch service");
 
 	Running = false;
 	Flush ();
