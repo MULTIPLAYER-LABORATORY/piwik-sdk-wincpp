@@ -279,6 +279,19 @@ These are the entry points provided by the Piwik tracking library:
 	formatting and round-trip precision on the wire. Rebuild headers and library
 	together after the state layout change.
 
+	``string PiwikState::Serialize(PiwikQueryFormat format)`` returns a URL-encoded
+	query string for both ``PIWIK_FORMAT_URL`` and ``PIWIK_FORMAT_JSON``. Bulk mode
+	returns one query entry, not a complete JSON body. The dispatcher wraps entries
+	in the outer JSON ``requests`` array. Supply original string values; do not
+	pre-encode them for this transport. In Unicode builds text becomes UTF-8 first.
+
+	Custom variable names/values are JSON-escaped inside their collection; that
+	entire JSON value is then URL-encoded for ``cvar``/``_cvar``. Original one-based
+	slots are preserved. GET and bulk now decode to the same parameter values,
+	including quotes, control characters, plus signs, ampersands, and literal
+	percent escapes. This corrects previously corrupted requests containing those
+	characters without changing tracking method signatures or parameter names.
+
 	``PiwikActionDimensions PiwikState::ActionDimensions`` holds request-local
 	custom dimensions for events, screens, and other tracking states. Configure
 	these IDs with Action scope on the Matomo site; server configuration determines

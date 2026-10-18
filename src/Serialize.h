@@ -30,11 +30,12 @@ using namespace std;
 class PiwikQueryBuilder : public ostringstream
 {
 private:
-	PiwikQueryFormat Format;
 	int Items;
 
 public:
-	PiwikQueryBuilder (PiwikQueryFormat frmt)  { Format = frmt; Items = 0; imbue(std::locale::classic()); }
+	// Both modes produce the same URL-encoded query string. Bulk mode embeds
+	// that string in a JSON array; percent-encoded values are already JSON-safe.
+	PiwikQueryBuilder (PiwikQueryFormat)  { Items = 0; imbue(std::locale::classic()); }
 
 	template <typename T> void AddParameter (LPCSTR nam, T val);
 	template <> void AddParameter<TSTRING> (LPCSTR nam, TSTRING val);
@@ -45,8 +46,6 @@ public:
 
     char*  Prefix ()           {  return (! Items ? "?" : "&"); }
 	char*  Assign ()           { return "="; }
-	char*  Quotes ()           { if (Format == PIWIK_FORMAT_URL) return QUOTES; return "\\" QUOTES; }
-	string Encode (string& s)  { if (Format == PIWIK_FORMAT_URL) return PercentEncode (s); return JsonEncode (s); }
     string Result ()           { return this->str () ; }
 };
 
@@ -73,20 +72,28 @@ template <typename T> void PiwikQueryBuilder::AddParameter (LPCSTR nam, T val)
 
 template <> void PiwikQueryBuilder::AddParameter<TSTRING> (LPCSTR nam, TSTRING val)
 {
-    *this << Prefix () << nam << Assign () << Encode (UTF8_STRING (val));
+    std::string encoded = UTF8_STRING(val);
+    *this << Prefix () << nam << Assign () << PercentEncode(encoded);
 	Items++;
 }
 
 template <> void PiwikQueryBuilder::AddParameter<PiwikVariableSet> (LPCSTR nam, PiwikVariableSet val)
 {
 	int n = 0;
-
-	*this << Prefix () << nam << Assign () << "{";
+	std::ostringstream variables;
+	variables.imbue(std::locale::classic());
+	variables << "{";
 	for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
 		if (val.Items[i].IsValid ())
-			*this << (n++ > 0 ? "," : "") << Quotes () << (i + 1) << Quotes () << ":[" << Quotes () << Encode (UTF8_STRING (val.Items[i].Name)) <<
-			            Quotes () << "," << Quotes () << Encode (UTF8_STRING (val.Items[i].Value)) << Quotes () << "]";
-	*this << "}";
+		{
+			std::string name = UTF8_STRING(val.Items[i].Name);
+			std::string value = UTF8_STRING(val.Items[i].Value);
+			variables << (n++ > 0 ? "," : "") << "\"" << (i + 1) << "\":[\""
+			          << JsonEncode(name) << "\",\"" << JsonEncode(value) << "\"]";
+		}
+	variables << "}";
+	std::string encoded = variables.str();
+	*this << Prefix () << nam << Assign () << PercentEncode(encoded);
 	Items++;
 }
 

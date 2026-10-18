@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### GET and bulk query encoding
+
+- URL-encode every string value in both GET and bulk requests, preserving query
+  delimiters, plus signs, literal percent escapes, quotes, controls, and UTF-8.
+- JSON-escape custom variable names/values, then URL-encode the entire JSON
+  collection once; preserve sparse one-based slots for visit and action variables.
+- Restrict unescaped percent-encoder bytes to ASCII unreserved characters instead
+  of using locale-dependent character classification.
+- Return the same encoded query from both state serialization formats; the
+  dispatcher still supplies the outer bulk JSON object. No tracking signatures
+  or parameter names change. Special-character values may now appear correctly
+  in reports where previous requests were corrupted or rejected.
+- Add decoded round-trip tests for all string fields, custom-variable JSON,
+  Unicode, every byte, and captured multi-event bulk bodies; extend the installed
+  static-library consumer. Live Matomo ingestion/reporting is not tested locally.
+
 ### Per-event custom dimensions
 
 - Add owned `PiwikActionDimensions` with numeric IDs 1..999, replacement, removal,
