@@ -25,6 +25,7 @@ endif()
 add_library(PiwikClient STATIC
     src/Client.cpp
     src/Dispatcher.cpp
+    src/HttpTransport.cpp
     src/State.cpp
     src/Utilities.cpp
 )
