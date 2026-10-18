@@ -1,0 +1,57 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+        "BUILD_TESTING": "ON",
+        "PIWIK_UNICODE": "ON"
+      }
+    },
+    {
+      "name": "windows-x86-debug",
+      "inherits": "windows-base",
+      "displayName": "Windows x86 Debug (MSVC, static CRT)",
+      "architecture": { "value": "x86", "strategy": "external" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "PIWIK_EXPECTED_POINTER_SIZE": "4" }
+    },
+    {
+      "name": "windows-x86-release",
+      "inherits": "windows-base",
+      "displayName": "Windows x86 Release (MSVC, static CRT)",
+      "architecture": { "value": "x86", "strategy": "external" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "PIWIK_EXPECTED_POINTER_SIZE": "4" }
+    },
+    {
+      "name": "windows-x64-debug",
+      "inherits": "windows-base",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "PIWIK_EXPECTED_POINTER_SIZE": "8" }
+    },
+    {
+      "name": "windows-x64-release",
+      "inherits": "windows-base",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "PIWIK_EXPECTED_POINTER_SIZE": "8" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-x86-debug", "configurePreset": "windows-x86-debug" },
+    { "name": "windows-x86-release", "configurePreset": "windows-x86-release" },
+    { "name": "windows-x64-debug", "configurePreset": "windows-x64-debug" },
+    { "name": "windows-x64-release", "configurePreset": "windows-x64-release" }
+  ],
+  "testPresets": [
+    { "name": "windows-x86-debug", "configurePreset": "windows-x86-debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-x86-release", "configurePreset": "windows-x86-release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-x64-debug", "configurePreset": "windows-x64-debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "windows-x64-release", "configurePreset": "windows-x64-release", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
+  ]
+}

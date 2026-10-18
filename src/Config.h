@@ -37,7 +37,7 @@
 // Target Operating System Version
 
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0501
+#define _WIN32_WINNT 0x0601
 #endif
 
 // If the Piwik server is in debug mode the network module will read the information responses

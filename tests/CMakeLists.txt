@@ -1,0 +1,5 @@
+add_executable(sdk_tests serialization_tests.cpp encoding_tests.cpp client_tests.cpp)
+target_link_libraries(sdk_tests PRIVATE Matomo::SDK GTest::gmock_main)
+target_compile_options(sdk_tests PRIVATE /utf-8 /EHsc)
+include(GoogleTest)
+gtest_discover_tests(sdk_tests DISCOVERY_TIMEOUT 30 PROPERTIES TIMEOUT 15)
