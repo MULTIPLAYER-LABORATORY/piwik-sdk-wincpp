@@ -61,6 +61,27 @@ These are the entry points provided by the Piwik tracking library:
 	
 	Allows to select the use of secure connections. When true, SSL will be used to access the Piwik service on port 443. Otherwise requests wil be sent unencoded over port 80.
 		
+	``bool VerifiesServerCertificate ()``
+
+	Returns whether HTTPS server certificates are verified. Defaults to true.
+
+	``void SetVerifyServerCertificate (bool verify)``
+
+	Selects the certificate-validation policy for this client. False explicitly
+	relaxes the legacy hostname, validity-date, issuer, and certificate-usage
+	checks. A configured logger receives a warning when disabling validation.
+	True restores normal WinHTTP certificate checks. Failed validation is never
+	automatically bypassed. This option has no certificate-related effect on HTTP.
+
+	The setting is read for each outgoing request/batch, including queued requests;
+	already in-flight requests retain their captured policy. The setting is atomic
+	and independent per client. Configure it before starting tracking where possible.
+	The transport recreates its HTTP session when the policy changes.
+
+	Migration: older SDK versions always ignored these certificate errors. Existing
+	deployments using untrusted certificates should trust their CA in Windows or
+	explicitly call SetVerifyServerCertificate(false).
+
 	``TSTRING CurrentUserAgent ()``
 	
 	Returns the name of the user agent transmitted to Piwik with each query.

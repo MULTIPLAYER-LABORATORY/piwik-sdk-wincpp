@@ -23,7 +23,21 @@
 - Synchronize queue emptiness and acknowledged status, and make the worker
   running flag atomic so completion checks do not race those fields.
 
-This extraction retains the existing certificate bypass, response-status policy,
-no-retry behavior, and shutdown policy. Performance and structured-error features
-remain planned work. Installed static-library consumers must rebuild against the
-updated headers and library together.
+The transport extraction retained the existing response-status, no-retry, and
+shutdown policies. Performance and structured-error features remain planned work.
+Installed static-library consumers must rebuild against the updated headers and
+library together.
+
+### Configurable server certificate validation
+
+- Enable HTTPS certificate validation by default (a behavior change from the old
+  unconditional certificate bypass).
+- Add `SetVerifyServerCertificate(bool)` and `VerifiesServerCertificate()` to the
+  public client API, backed by an atomic per-client dispatcher setting.
+- Support an explicit opt-out using the four legacy ignore flags; log a warning
+  to the configured logger when validation is disabled.
+- Keep HTTP unaffected by certificate flags and never automatically bypass a
+  certificate failure. Recreate the WinHTTP session when verification policy changes.
+- Test defaults, opt-out, restoration, client isolation, warning logging, Windows
+  flag selection, and secure-failure delivery. Extend the installed-package check
+  to exercise the new public methods.

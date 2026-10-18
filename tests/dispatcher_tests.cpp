@@ -89,6 +89,7 @@ TEST_F(DispatcherTest, GetRequestContainsEncodedQueryAndNoBody)
     EXPECT_EQ(L"GET", captured.method);
     EXPECT_EQ(L"example.invalid", captured.host);
     EXPECT_TRUE(captured.secure);
+    EXPECT_TRUE(captured.verifyServerCertificate);
     EXPECT_TRUE(captured.body.empty());
     EXPECT_THAT(captured.path, HasSubstr(L"/piwik.php?idsite=7&url=%2Fscreen"));
     EXPECT_THAT(captured.path, HasSubstr(L"&e_c=Demo&e_a=Launch&e_n=App&e_v=2.5"));
@@ -238,5 +239,93 @@ TEST_F(DispatcherTest, HttpEndpointDoesNotSetSecureFlag)
     const int serial = dispatcher->Submit(state);
     ASSERT_TRUE(dispatcher->Flush());
     ExpectStatus(serial, 1);
+}
+
+TEST_F(DispatcherTest, ExplicitCertificateOptOutReachesTransport)
+{
+    dispatcher->SetVerifyServerCertificate(false);
+    EXPECT_FALSE(dispatcher->VerifiesServerCertificate());
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_TRUE(request.secure);
+        EXPECT_FALSE(request.verifyServerCertificate);
+        return Status(204);
+    }));
+    auto state = Event();
+    const int serial = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(serial, 1);
+}
+
+TEST_F(DispatcherTest, CertificateValidationCanBeRestoredForSubsequentSends)
+{
+    ::testing::InSequence sequence;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_FALSE(request.verifyServerCertificate);
+        return Status(204);
+    }));
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_TRUE(request.verifyServerCertificate);
+        return Status(204);
+    }));
+    dispatcher->SetVerifyServerCertificate(false);
+    auto state = Event();
+    const int first = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(first, 1);
+    dispatcher->SetVerifyServerCertificate(true);
+    const int second = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(second, 1);
+}
+
+TEST_F(DispatcherTest, CertificateFailureDoesNotDisableValidationOrRetry)
+{
+    auto failure = Status(0);
+    failure.errorCode = ERROR_WINHTTP_SECURE_FAILURE;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([&](const HttpRequest& request) {
+        EXPECT_TRUE(request.verifyServerCertificate);
+        return failure;
+    }));
+    auto state = Event();
+    const int serial = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(serial, -1);
+    EXPECT_TRUE(dispatcher->VerifiesServerCertificate());
+}
+
+TEST_F(DispatcherTest, DisablingValidationWritesWarningToConfiguredLogger)
+{
+    std::wostringstream log;
+    dispatcher->SetLogger(&log, PIWIK_LOG_ERROR);
+    dispatcher->SetVerifyServerCertificate(false);
+    EXPECT_THAT(log.str(), HasSubstr(L"WARNING: Server certificate validation disabled"));
+    dispatcher->SetLogger(nullptr, PIWIK_LOG_ERROR);
+}
+
+TEST(WinHttpCertificatePolicy, VerificationIsEnabledByDefault)
+{
+    HttpRequest request;
+    request.secure = true;
+    EXPECT_TRUE(request.verifyServerCertificate);
+    EXPECT_EQ(0u, piwik::detail::CertificateSecurityFlags(request));
+}
+
+TEST(WinHttpCertificatePolicy, ExplicitHttpsOptOutUsesLegacyIgnoreFlags)
+{
+    HttpRequest request;
+    request.secure = true;
+    request.verifyServerCertificate = false;
+    const DWORD expected = SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
+        SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+        SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+    EXPECT_EQ(expected, piwik::detail::CertificateSecurityFlags(request));
+}
+
+TEST(WinHttpCertificatePolicy, HttpDoesNotApplyCertificateIgnoreFlags)
+{
+    HttpRequest request;
+    request.secure = false;
+    request.verifyServerCertificate = false;
+    EXPECT_EQ(0u, piwik::detail::CertificateSecurityFlags(request));
 }
 } // namespace

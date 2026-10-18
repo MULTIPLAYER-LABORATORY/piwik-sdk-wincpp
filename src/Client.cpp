@@ -86,6 +86,16 @@ void PiwikClient::SetSecureConnection (bool f)
 	Dispatcher.SetSecureConnection (f);
 }
 
+bool PiwikClient::VerifiesServerCertificate ()
+{
+	return Dispatcher.VerifiesServerCertificate ();
+}
+
+void PiwikClient::SetVerifyServerCertificate (bool verify)
+{
+	Dispatcher.SetVerifyServerCertificate (verify);
+}
+
 TSTRING PiwikClient::CurrentUserAgent ()  
 { 
 	PiwikScopedLock lck (Mutex);

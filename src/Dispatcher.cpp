@@ -97,6 +97,18 @@ void PiwikDispatcher::SetSecureConnection (bool f)
 	Secure = f;
 }
 
+bool PiwikDispatcher::VerifiesServerCertificate ()
+{
+	return VerifyServerCertificate.load ();
+}
+
+void PiwikDispatcher::SetVerifyServerCertificate (bool verify)
+{
+	const bool previous = VerifyServerCertificate.exchange (verify);
+	if (previous && !verify)
+		Logger.Log (L"WARNING: Server certificate validation disabled for this client (HTTPS requests).");
+}
+
 void PiwikDispatcher::SetConnectionTimeout (int t)
 {
 	ConnectionTimeout = t;
@@ -279,6 +291,7 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
     request.host = host;
     request.path = path;
     request.secure = Secure;
+    request.verifyServerCertificate = VerifyServerCertificate.load();
     request.headers = L"Content-Type:application/json;charset=UTF-8\r\n";
     if (mth == PIWIK_METHOD_GET)
     {

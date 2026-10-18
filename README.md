@@ -69,7 +69,7 @@ For an offline test build, supply an existing checkout of the pinned GoogleTest 
 
 Network tests use the internal `piwik::detail::IHttpTransport` interface and an owning injection constructor on `PiwikDispatcher`. Production uses `WinHttpTransport`; gMock supplies controlled responses while tests exercise real serialization, batching, and request-status handling. Transport headers are not installed as part of the application API. Public tracking methods remain nonvirtual. Tests cover GET/POST request construction, HTTP success/error classification, transport errors, dry runs, batch limits, and per-request outcomes. They use bounded completion checks rather than fixed scheduling sleeps.
 
-The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. Existing certificate bypass, HTTP-status-based success classification, no-retry behavior, and shutdown policy are retained in this extraction. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, certificate configuration, and broader shutdown/configuration thread-safety changes remain separate increments.
+The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, and broader shutdown/configuration thread-safety changes remain separate increments.
 
 Timing dependencies can be injected separately when session/retry behavior is tested. Known legacy behaviors such as omission of zero event values and action-dimension wire formatting should receive dedicated regression tests with their fixes rather than being declared correct by this migration.
 
@@ -82,4 +82,36 @@ Direct entry points are provided to the hosting application to track standard ta
 ### Interface
 
 To get a detailed insight into the interface of the library take a look at the [Reference Documentation](doc/Reference.md).
+
+### Server certificate validation
+
+HTTPS server certificate validation is enabled by default. This changes the old
+behavior, which silently ignored hostname, validity-date, issuer, and usage
+errors. Applications should normally use a certificate trusted by Windows.
+
+For a deployment that deliberately requires the old behavior, opt out on that
+client instance before tracking:
+
+```cpp
+PiwikClient tracker(_T("https://analytics.example/piwik.php"), 1);
+tracker.SetVerifyServerCertificate(false); // Explicit opt-out for this deployment
+// tracker.VerifiesServerCertificate() now returns false.
+```
+
+Call `SetVerifyServerCertificate(true)` to restore validation. The option is
+independent for each client. It affects subsequent sends, including requests
+already queued; an in-flight request keeps the policy captured when it began.
+The transport recreates its WinHTTP session when the verification policy changes
+so it does not reuse connections from the previous policy.
+
+If a logger is configured when validation is disabled, it receives a warning.
+Certificate failures remain failed deliveries; the SDK never automatically
+disables verification or retries with relaxed settings. Plain HTTP does not use
+certificate validation, and this option does not make HTTPS work without a TLS
+server certificate. The opt-out relaxes the four legacy certificate checks; it
+does not disable TLS protocol or other security checks.
+
+For a private/self-signed deployment, trusting the issuing CA in Windows allows
+validation to remain enabled. Rebuild consumers with the updated headers and
+static library together when adopting this version.
 
