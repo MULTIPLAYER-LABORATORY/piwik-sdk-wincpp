@@ -114,6 +114,47 @@ TEST_F(DispatcherTest, PostRequestCarriesBulkJsonAndRetainsEndpoint)
     EXPECT_THAT(captured.body, HasSubstr("&e_n=App&e_v=2.5\"]}"));
 }
 
+TEST_F(DispatcherTest, GetDimensionsAreEncodedAndCapturedAtSubmission)
+{
+    HttpRequest captured;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([&](const HttpRequest& request) {
+        captured = request;
+        return Status(204);
+    }));
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    auto state = Event();
+    state.ActionDimensions.Set(3, _T("Win32 & HRESULT"));
+    const int serial = dispatcher->Submit(state);
+    state.ActionDimensions.Clear();
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(serial, 1);
+    EXPECT_THAT(captured.path, HasSubstr(L"&dimension3=Win32%20%26%20HRESULT"));
+}
+
+TEST_F(DispatcherTest, BulkEventsKeepIndependentErrorContextSnapshots)
+{
+    HttpRequest captured;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([&](const HttpRequest& request) {
+        captured = request;
+        return Status(204);
+    }));
+    auto state = Event();
+    state.ActionDimensions.Set(1, _T("failure"));
+    state.ActionDimensions.Set(2, _T("Win32"));
+    state.ActionDimensions.Set(3, _T("5 & 6"));
+    const int failure = dispatcher->Submit(state);
+    state.ActionDimensions.Set(1, _T("success"));
+    state.ActionDimensions.Set(2, _T("none"));
+    state.ActionDimensions.Set(3, _T("none"));
+    const int success = dispatcher->Submit(state);
+    state.ActionDimensions.Clear();
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(success, 1);
+    ExpectStatus(failure, 1);
+    EXPECT_THAT(captured.body, HasSubstr("&dimension1=failure&dimension2=Win32&dimension3=5%20%26%206\",\"?idsite="));
+    EXPECT_THAT(captured.body, HasSubstr("&dimension1=success&dimension2=none&dimension3=none\"]}"));
+}
+
 struct StatusCase { unsigned int code; int expected; };
 class DeliveryStatusTest : public DispatcherTest,
     public ::testing::WithParamInterface<StatusCase> {};

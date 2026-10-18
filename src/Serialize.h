@@ -39,8 +39,9 @@ public:
 	template <typename T> void AddParameter (LPCSTR nam, T val);
 	template <> void AddParameter<TSTRING> (LPCSTR nam, TSTRING val);
 	template <> void AddParameter<PiwikVariableSet> (LPCSTR nam, PiwikVariableSet val);
-    void AddDimension(PiwikDimensionsSet val);
-    void AddDimension(PiwikVisitDimensionsSet val);
+    void AddDimensions(const PiwikVisitDimensionsSet& visit,
+                       const PiwikDimensionsSet& legacyAction,
+                       const PiwikActionDimensions& action);
 
     char*  Prefix ()           {  return (! Items ? "?" : "&"); }
 	char*  Assign ()           { return "="; }
@@ -89,26 +90,38 @@ template <> void PiwikQueryBuilder::AddParameter<PiwikVariableSet> (LPCSTR nam, 
 	Items++;
 }
 
-void PiwikQueryBuilder::AddDimension(PiwikDimensionsSet val)
+void PiwikQueryBuilder::AddDimensions(const PiwikVisitDimensionsSet& visit,
+                                    const PiwikDimensionsSet& legacyAction,
+                                    const PiwikActionDimensions& action)
 {
-    for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+    // Emit each wire key once. Request-local values take precedence over visit
+    // defaults; typed values take precedence over the legacy action array.
+    std::map<TSTRING, TSTRING> dimensions;
+    for (const auto& item : visit.Items)
     {
-        if (val.Items[i].IsValid ())
-        {
-            *this << Prefix () << UTF8_STRING(val.Items[i].Name) << Assign () << Quotes () << Encode (UTF8_STRING (val.Items[i].Value)) << Quotes ();
-        }
+        if (!item.Name.empty() && !item.Value.empty())
+            dimensions[item.Name] = item.Value;
     }
-    Items++;
-}
-
-void PiwikQueryBuilder::AddDimension(PiwikVisitDimensionsSet val)
-{
-    for (int i = 0; i < ARRAY_COUNT (val.Items); i++)
+    for (const auto& item : legacyAction.Items)
     {
-        if (val.Items[i].IsValid ())
-        {
-            *this << Prefix () << UTF8_STRING(val.Items[i].Name) << Assign () <<  Encode (UTF8_STRING (val.Items[i].Value)) ;
-        }
+        if (!item.Name.empty() && !item.Value.empty())
+            dimensions[item.Name] = item.Value;
     }
-    Items++;
+    for (const auto& item : action.Values())
+    {
+        std::basic_ostringstream<TCHAR> name;
+        name.imbue(std::locale::classic());
+        name << _T("dimension") << item.first;
+        dimensions[name.str()] = item.second;
+    }
+    for (auto& item : dimensions)
+    {
+        // Bulk requests also contain URL query strings inside their JSON array.
+        // URL encoding makes the result JSON-safe and preserves &, +, =, etc.
+        TSTRING name = item.first;
+        std::string encodedName = UTF8_STRING(name);
+        std::string encodedValue = UTF8_STRING(item.second);
+        *this << Prefix () << PercentEncode(encodedName) << Assign () << PercentEncode(encodedValue);
+        Items++;
+    }
 }

@@ -62,6 +62,39 @@ TEST(Client, LowLevelExplicitZeroSurvivesClientEnrichment)
     EXPECT_NE(std::wstring::npos, log.str().find(L"&e_v=0"));
 }
 
+TEST(Client, PerEventDimensionsSurviveEnrichmentWithoutBecomingVisitState)
+{
+    std::wostringstream log;
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDispatchInterval(3600);
+    client.SetDryRun(true);
+    client.SetLogger(&log, PIWIK_LOG_DEBUG);
+    client.SetVisitDimensions(1, _T("dimension9"), _T("Windows"));
+    PiwikState state;
+    state.TrackedPath = _T("/startup");
+    state.EventCategory = _T("Performance");
+    state.EventAction = _T("Startup");
+    state.ActionDimensions.Set(2, _T("Win32 & HRESULT"));
+    EXPECT_GT(client.Track(state), 0);
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension2=Win32%20%26%20HRESULT&dimension9=Windows"));
+    log.str(L"");
+    EXPECT_GT(client.TrackEvent(_T("/event"), _T("Demo"), _T("Open")), 0);
+    EXPECT_EQ(std::wstring::npos, log.str().find(L"&dimension2="));
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension9=Windows"));
+}
+
+TEST(Client, LegacyTrackActionUsesCorrectDimensionWireValues)
+{
+    std::wostringstream log;
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDispatchInterval(3600);
+    client.SetDryRun(true);
+    client.SetLogger(&log, PIWIK_LOG_DEBUG);
+    EXPECT_GT(client.TrackAction(_T("/install"), _T("Install"), 0, 1,
+        _T("dimension2"), _T("Win32 & HRESULT")), 0);
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension2=Win32%20%26%20HRESULT"));
+}
+
 TEST(Client, LegacyEventCallsStillOmitMissingAndZeroValues)
 {
     std::wostringstream log;

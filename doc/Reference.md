@@ -279,6 +279,29 @@ These are the entry points provided by the Piwik tracking library:
 	formatting and round-trip precision on the wire. Rebuild headers and library
 	together after the state layout change.
 
+	``PiwikActionDimensions PiwikState::ActionDimensions`` holds request-local
+	custom dimensions for events, screens, and other tracking states. Configure
+	these IDs with Action scope on the Matomo site; server configuration determines
+	scope. The SDK does not reserve application-specific IDs or error codes.
+
+	- ``bool Set(int id, const TSTRING& value)``: own/replace a string for ID 1..999;
+	  false for an invalid ID, with no mutation. No fixed-slot limit or SDK truncation.
+	- ``bool Remove(int id)``: omit the ID; return whether it existed.
+	- ``void Clear()``: omit all typed dimensions from this collection.
+	- ``const std::map<int, TSTRING>& Values() const``: inspect entries.
+
+	An empty string explicitly emits ``dimensionN=``. Omission/empty values do not
+	guarantee clearing existing server data. Queued requests hold serialized copies,
+	so changing the state after ``Track`` returns cannot alter those requests.
+	Use a fresh state or clear/replace context between operations.
+
+	For identical wire keys, precedence is typed action dimensions, legacy
+	``DimensionVariables``, then ``VistDimensionVariables`` visit defaults. Each key
+	is emitted once, without wrapper quotes and with URL-encoded names/values in
+	both GET and bulk formats. Last occurrence wins within a legacy array.
+	Correcting the old wrapper quotes can create separate report entries from
+	historical quoted values. Rebuild the static library and headers together.
+
 	``AmountOfTime`` is a legacy integer-millisecond field serialized as ``gt_ms``;
 	modern application measurements should use event values with explicit units.
 
