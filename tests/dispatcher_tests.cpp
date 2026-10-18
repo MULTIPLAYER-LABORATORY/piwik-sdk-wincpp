@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <limits>
 #include <thread>
 #include <vector>
 #include "Piwik.h"
@@ -300,6 +301,39 @@ TEST_F(DispatcherTest, DisablingValidationWritesWarningToConfiguredLogger)
     dispatcher->SetVerifyServerCertificate(false);
     EXPECT_THAT(log.str(), HasSubstr(L"WARNING: Server certificate validation disabled"));
     dispatcher->SetLogger(nullptr, PIWIK_LOG_ERROR);
+}
+
+TEST_F(DispatcherTest, InvalidNumericRequestsDoNotReachTransportOrConsumeIds)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(204)));
+    for (double value : {std::numeric_limits<double>::quiet_NaN(),
+                        std::numeric_limits<double>::infinity(),
+                        -std::numeric_limits<double>::infinity()})
+    {
+        auto invalid = Event();
+        invalid.SetEventValue(value);
+        EXPECT_EQ(0, dispatcher->Submit(invalid));
+    }
+    EXPECT_FALSE(dispatcher->Flush());
+    auto valid = Event();
+    valid.SetEventValue(0.0);
+    const int serial = dispatcher->Submit(valid);
+    EXPECT_EQ(1, serial);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(serial, 1);
+}
+
+TEST_F(DispatcherTest, ExplicitZeroReachesTheBulkRequest)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_THAT(request.body, HasSubstr("&e_v=0\"]}"));
+        return Status(204);
+    }));
+    auto state = Event();
+    state.SetEventValue(0.0);
+    const int serial = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(serial, 1);
 }
 
 TEST(WinHttpCertificatePolicy, VerificationIsEnabledByDefault)

@@ -142,6 +142,11 @@ void PiwikDispatcher::SetLogger (wostream* s, PiwikLogLevel lvl)
 
 int PiwikDispatcher::Submit (PiwikState& st)
 {
+	if (!st.HasFiniteNumbers())
+	{
+		Logger.Error (L"Event value and revenue must be finite; request not queued");
+		return 0;
+	}
 	PiwikScopedLock lck (Mutex);
 	Request itm;
 

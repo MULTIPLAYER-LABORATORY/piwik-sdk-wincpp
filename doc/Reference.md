@@ -174,21 +174,36 @@ These are the entry points provided by the Piwik tracking library:
 	``ctg``: the category of the event
 	``act``: the action being tracked
 	``nam``: the name of the property being tracked
-	``val``: the numeric value associated with this property
+	``val``: the numeric float value associated with this property. Omitted and zero
+	values retain legacy absent-value behavior. For explicit zero or double precision,
+	use ``PiwikState::SetEventValue(double)`` followed by ``Track(state)``.
 		
 	```	
-	int TrackScreen (LPCTSTR path, LPCTSTR act = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, 
+	int TrackScreen (LPCTSTR path, LPCTSTR act = 0, int amountOfTime = 0,
+                    LPCTSTR nam1 = 0, LPCTSTR val1 = 0,
                     LPCTSTR nam2 = 0, LPCTSTR val2 = 0, LPCTSTR nam3 = 0, LPCTSTR val3 = 0, 
-                    LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0)
+                    LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0,
+                    LPCTSTR nam6 = 0, LPCTSTR val6 = 0, LPCTSTR nam7 = 0, LPCTSTR val7 = 0,
+                    LPCTSTR nam8 = 0, LPCTSTR val8 = 0)
 	```
 	Parameters:
 		
 	``path``: the URL of the event (required)
 	``act``: the action being tracked
-	``nam[1-5]``: the name of a local variable associated with this screen
-	``val[1-5]``: the value of this variable
+	``amountOfTime``: legacy generation time in seconds, converted to milliseconds
+	in ``gt_ms``. Matomo 4+ no longer records this metric; use named event values for
+	application durations. The old wire behavior is retained for older servers.
+	``nam[1-8]``: the name of a local variable associated with this screen
+	``val[1-8]``: the value of this variable
 		
 	Local variables should keep always the same position within this set in order to be correctly tracked. When sending these values to the server they will be assigned to the slot corresponding to the positional parameter being used. Any unneeded slots can be filled with NULL.
+
+	``int TrackAction(LPCTSTR path, LPCTSTR act, int amountOfTime, int nDimensionNum, ...)``
+
+	Tracks an action with dimension name/value pairs. ``amountOfTime`` has the same
+	legacy seconds-to-``gt_ms`` semantics as ``TrackScreen`` and is not a supported
+	duration metric on Matomo 4+. No automatic remapping to event or ``pf_*`` fields
+	is performed.
 		
 	``int TrackGoal (LPCTSTR path, int goal, float rev = 0)``
 	
@@ -225,7 +240,7 @@ These are the entry points provided by the Piwik tracking library:
 		
 	To track more complex situations a ``PiwikState`` can be explicitly constructed and provided as such:
 		
-	``bool Track (PiwikState& st)``
+	``int Track (PiwikState& st)``
 	
 	Parameters:
 	
@@ -244,7 +259,8 @@ These are the entry points provided by the Piwik tracking library:
 		TSTRING EventCategory;
 		TSTRING EventAction;
 		TSTRING EventName;
-		float EventValue;
+		double EventValue;
+		bool HasEventValue;
 		int Goal;
 		float Revenue;
 		TSTRING OutLink;
@@ -254,6 +270,18 @@ These are the entry points provided by the Piwik tracking library:
 		TSTRING ContentInteraction;
 		PiwikVariableSet ScreenVariables;
 		
+	``void PiwikState::SetEventValue(double value)`` records an explicit event value,
+	including zero. ``ClearEventValue()`` resets the value and presence flag. A
+	nonzero direct ``EventValue`` assignment still serializes for legacy callers.
+	``HasFiniteNumbers() const`` checks event value and revenue for NaN/infinity.
+	``Track`` returns zero for invalid numbers without enqueuing; direct state
+	serialization throws ``std::invalid_argument``. Numbers use locale-independent
+	formatting and round-trip precision on the wire. Rebuild headers and library
+	together after the state layout change.
+
+	``AmountOfTime`` is a legacy integer-millisecond field serialized as ``gt_ms``;
+	modern application measurements should use event values with explicit units.
+
 	``bool Flush ()``
 	
 	Allows to send all pending requests to the server. This is called implicitly when closing the Piwik instance.

@@ -16,11 +16,32 @@
 #include "QueryParams.h"
 #include "Serialize.h"
 #include "State.h"
+#include <cmath>
+#include <stdexcept>
+
+void PiwikState::SetEventValue (double value)
+{
+	EventValue = value;
+	HasEventValue = true;
+}
+
+void PiwikState::ClearEventValue ()
+{
+	EventValue = 0;
+	HasEventValue = false;
+}
+
+bool PiwikState::HasFiniteNumbers () const
+{
+	return std::isfinite(EventValue) && std::isfinite(Revenue);
+}
 
 // Serialization of a tracking state associating it to the corresponding request parameters
 
 string PiwikState::Serialize (PiwikQueryFormat frmt)
 {
+	if (!HasFiniteNumbers())
+		throw std::invalid_argument("Event value and revenue must be finite");
 	PiwikQueryBuilder qb (frmt);
 
 	qb.AddParameter (PARAM_SITE_ID, SiteId);
@@ -49,7 +70,7 @@ string PiwikState::Serialize (PiwikQueryFormat frmt)
 		qb.AddParameter (PARAM_EVENT_ACTION, EventAction);
 	if (! EventName.empty ())
 		qb.AddParameter (PARAM_EVENT_NAME, EventName);
-	if (EventValue)
+	if (HasEventValue || EventValue)
 		qb.AddParameter (PARAM_EVENT_VALUE, EventValue);
 	if (Goal)
 		qb.AddParameter (PARAM_GOAL_ID, Goal);

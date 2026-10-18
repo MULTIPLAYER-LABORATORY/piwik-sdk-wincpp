@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Numeric measurement correctness and legacy timing
+
+- Serialize numbers using the classic locale with round-trip floating precision;
+  encode positive exponent signs in both GET and bulk query strings.
+- Store event values as double. Add explicit presence via `SetEventValue(double)`
+  and `ClearEventValue()` so zero can be measured without changing the existing
+  `TrackEvent(..., float val = 0)` omission behavior.
+- Reject NaN and infinity for events/revenue before queuing. Direct serialization
+  of invalid numeric states throws `std::invalid_argument`.
+- Mark `gt_ms`, `AmountOfTime`, and legacy timing arguments as legacy-only in
+  source and documentation. Matomo 4+ no longer records generation time. Preserve
+  older-server wire behavior; recommend named event values for app durations.
+- Add locale, precision, exponent, explicit-zero, invalid-number, client/dispatcher,
+  and legacy-timing regression coverage. Static consumers must rebuild headers
+  and library together because the tracking-state layout changed.
+
 - Replace maintained VS2010 solutions/projects with CMake 3.21+ and Ninja presets.
 - Require MSVC from Visual Studio 2019 or newer and retain C++14 compatibility.
 - Build an installable static library with a `Matomo::SDK` CMake package target.

@@ -408,6 +408,11 @@ int PiwikClient::TrackInteraction (LPCTSTR path, LPCTSTR content, LPCTSTR piece,
 int PiwikClient::Track (PiwikState& st)
 {
 	PiwikScopedLock lck (Mutex);
+	if (!st.HasFiniteNumbers())
+	{
+		Logger.Error (L"Event value and revenue must be finite; request not queued");
+		return 0;
+	}
 
 	if (! Disabled && State.SiteId && ! st.TrackedPath.empty ())
 	{
