@@ -10,6 +10,7 @@ namespace piwik { namespace detail {
 struct HttpRequest
 {
     std::wstring host;
+    INTERNET_PORT port = INTERNET_DEFAULT_PORT;
     std::wstring path;
     std::wstring method;
     std::wstring headers;

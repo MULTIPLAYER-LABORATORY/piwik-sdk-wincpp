@@ -63,7 +63,18 @@ For a Visual Studio application using its own project files, add the installed `
 
 ### Unit tests and incremental changes
 
-GoogleTest/gMock 1.14.0 is pinned by commit and built in C++14 mode with the same runtime as the SDK. The initial tests cover encoding, Unicode conversion, event serialization, visit dimensions, optional fields, and linking/configuring the real client. The helper and CI also install a package into an isolated directory, build a standalone consumer with `find_package`, and run it. Tests do not contact Matomo or write visitor registry state. gMock is available for the next increment; no public tracking methods have been made virtual.
+GoogleTest/gMock 1.14.0 is pinned by commit and built in C++14 mode with the same runtime as the SDK. Tests cover encoding, Unicode conversion, event serialization, visit dimensions, optional fields, and linking/configuring the real client. The helper and CI also install a package into an isolated directory, build a standalone consumer with `find_package`, and run it. Tests do not contact Matomo or write visitor registry state. Public tracking methods remain nonvirtual.
+
+CTest also runs three real WinHTTP TLS checks through a temporary loopback server
+on an automatically assigned port: rejection of an untrusted certificate,
+successful delivery with explicit opt-out, and rejection after restoring
+validation on the same transport. The fixture uses PowerShell (`pwsh`, or Windows
+PowerShell with the required .NET certificate APIs), generates its own untrusted
+certificate, and installs nothing in Windows certificate stores. Schannel uses a
+temporary Windows-managed private key that is removed on certificate disposal.
+No external server, firewall change, trusted certificate, or fixed port is needed.
+The `tls_integration` CTest entry runs the three handshake tests; these are
+separate from the 37 unit-test entries.
 
 For an offline test build, supply an existing checkout of the pinned GoogleTest commit through `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path>`; the helper accepts extra configure options through `-ConfigureArguments`.
 

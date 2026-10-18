@@ -53,7 +53,7 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
     }
 
     ScopedInternetHandle connection(::WinHttpConnect(session_, request.host.c_str(),
-        INTERNET_DEFAULT_PORT, 0));
+        request.port, 0));
     if (!connection.value) return Failure(L"Could not open HTTP connection");
 
     ScopedInternetHandle httpRequest(::WinHttpOpenRequest(connection.value,

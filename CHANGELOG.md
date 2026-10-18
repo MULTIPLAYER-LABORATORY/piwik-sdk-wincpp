@@ -41,3 +41,8 @@ library together.
 - Test defaults, opt-out, restoration, client isolation, warning logging, Windows
   flag selection, and secure-failure delivery. Extend the installed-package check
   to exercise the new public methods.
+- Add three real WinHTTP TLS handshake checks against a temporary loopback-only
+  server, included in CTest/CI. The fixture uses an untrusted self-signed
+  certificate without installing certificates in Windows stores.
+- Allow an explicit port on internal transport requests for the randomly assigned
+  loopback fixture port; production dispatch continues using its existing default.
