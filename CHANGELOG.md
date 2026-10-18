@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Bounded delivery waits
+
+- Add `FlushAndWait(std::chrono::milliseconds)` returning `PiwikFlushResult`
+  (`Success`, `Failed`, `TimedOut`). Capture a request-ID target, notify waiters
+  on completion, and retain cumulative failure reporting through that target.
+- Keep later requests outside active flush targets' POST batches. Support multiple
+  waiters, empty clients, nonpositive timeouts, and draining after tracking is disabled.
+- Track completion for failed as well as successful sends. Preserve nonblocking
+  `Flush()`, individual request statuses, no-retry policy, and legacy destruction.
+- Fix mixed-method/endpoint batching so pending POSTs are not dropped or delivered
+  to a different request's endpoint. Clean up worker resources on launch failure.
+- Add blocked-send, timeout/recovery, failure, concurrent-target/waiter, batching,
+  client, and installed-consumer tests. Rebuild headers and library together;
+  live Matomo ingestion and shutdown-policy redesign remain separate work.
+
 ### Chrono duration tracking
 
 - Add `TrackDuration(path, operation, metric, elapsed, dimensions = {})` using

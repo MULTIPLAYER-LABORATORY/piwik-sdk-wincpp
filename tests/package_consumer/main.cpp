@@ -30,6 +30,7 @@ int main()
     context.Set(1, _T("success"));
     if (client.TrackDuration(_T("/startup"), _T("Startup"), _T("ready_ms"),
         std::chrono::microseconds(1250), context) <= 0) return 13;
+    if (client.FlushAndWait(std::chrono::seconds(3)) != PiwikFlushResult::Success) return 14;
     return client.CurrentSiteId() == 7 && client.UsesSecureConnection() &&
         client.VerifiesServerCertificate() ? 0 : 3;
 }

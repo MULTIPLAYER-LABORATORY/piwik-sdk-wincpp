@@ -17,6 +17,17 @@
 #include "Dispatcher.h"
 #include "HttpTransport.h"
 #include <utility>
+#include <mutex>
+
+namespace {
+// Adapt the existing recursive Windows mutex for condition_variable_any.
+struct CompletionLock
+{
+    PiwikLock& mutex;
+    void lock() { mutex.Activate(); }
+    void unlock() { mutex.Release(); }
+};
+}
 
 // Configuration
 
@@ -35,7 +46,7 @@ PiwikDispatcher::PiwikDispatcher (std::unique_ptr<piwik::detail::IHttpTransport>
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
 	DispatchInterval = PIWIK_DISPATCH_INTERVAL; 
 	Secure = DryRun = Synchronous = Running = false; 
-	SerialNumber = LastAcknowledged = 0;
+	SerialNumber = LastAcknowledged = LastCompleted = 0;
 	Service = Wake = 0;
 }
 
@@ -171,7 +182,39 @@ int PiwikDispatcher::Submit (PiwikState& st)
 
 bool PiwikDispatcher::Flush ()
 {
+	PiwikScopedLock lck (Mutex);
 	return (Service && ::SetEvent (Wake));
+}
+
+PiwikFlushResult PiwikDispatcher::FlushAndWait (std::chrono::milliseconds timeout)
+{
+	using Clock = std::chrono::steady_clock;
+	const auto start = Clock::now();
+	const auto maxWait = std::chrono::duration_cast<std::chrono::milliseconds>((Clock::time_point::max)() - start);
+	const auto deadline = timeout >= maxWait ? (Clock::time_point::max)() :
+	    start + (timeout.count() > 0 ? timeout : std::chrono::milliseconds::zero());
+	CompletionLock adapter{Mutex};
+	std::unique_lock<CompletionLock> lock(adapter);
+	const int target = SerialNumber;
+	if (LastCompleted < target)
+	{
+		const auto boundary = FlushTargets.insert(target);
+		struct RemoveBoundary
+		{
+			std::multiset<int>& targets;
+			std::multiset<int>::iterator position;
+			~RemoveBoundary() { targets.erase(position); }
+		} removeBoundary{FlushTargets, boundary};
+		if ((!Service && !LaunchService()) || !::SetEvent(Wake))
+			return PiwikFlushResult::Failed;
+		if (!CompletionChanged.wait_until(lock, deadline, [&] { return LastCompleted >= target; }))
+			return PiwikFlushResult::TimedOut;
+	}
+	// Cumulative through the captured request ID; an earlier failure must not be
+	// hidden by a later success or by completion just before this call starts.
+	for (int failure : Failures)
+		if (failure <= target) return PiwikFlushResult::Failed;
+	return PiwikFlushResult::Success;
 }
 
 int PiwikDispatcher::RequestStatus (int rqst)
@@ -202,6 +245,8 @@ bool PiwikDispatcher::LaunchService ()
 			return true;
 
 	Logger.Error (L"Could not launch Piwik dispatch service");
+	Running = false;
+	if (Wake) ::CloseHandle(Wake), Wake = 0;
 	return false;
 }
 
@@ -228,55 +273,53 @@ void PiwikDispatcher::ShutdownService ()
 unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 {
 	PiwikDispatcher* dsp = (PiwikDispatcher*) arg;
-	Request itm;
-	string msg;
-	int grp[PIWIK_POST_BUNDLE];
-	int cnt, avl;
-	bool vld;
 
 	while (dsp && dsp->Running)
 	{
 		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval > 0 ? dsp->DispatchInterval * 1000 - 500 : INFINITE));
-		cnt = 0, msg.clear ();
 		while (true)
 		{
+			std::vector<Request> batch;
+			batch.reserve(PIWIK_POST_BUNDLE);
 			dsp->Mutex.Activate ();
 			if (dsp->Requests.empty ())
 			{
 				dsp->Mutex.Release ();
 				break;
 			}
-			itm = dsp->Requests.front ();
-			dsp->Requests.pop_front ();
-			avl = dsp->Requests.size ();
+			batch.push_back(dsp->Requests.front());
+			dsp->Requests.pop_front();
+			const auto& first = batch.front();
+			const int boundary = dsp->FlushTargets.empty() ? dsp->SerialNumber : *dsp->FlushTargets.begin();
+			// Complete a POST batch before a GET or endpoint transition. Never
+			// acknowledge an unsent request as part of a different HTTP request.
+			while (first.Method == PIWIK_METHOD_POST && batch.size() < PIWIK_POST_BUNDLE && !dsp->Requests.empty())
+			{
+				const auto& next = dsp->Requests.front();
+				if (next.Serial > boundary || next.Method != first.Method || next.Host != first.Host || next.Path != first.Path) break;
+				batch.push_back(next);
+				dsp->Requests.pop_front();
+			}
 			dsp->Mutex.Release ();
-
-			grp[cnt++] = itm.Serial;
-
-			if (itm.Method == PIWIK_METHOD_GET)
-				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_GET, itm.Query);
+			auto& request = batch.front();
+			bool vld;
+			if (request.Method == PIWIK_METHOD_GET)
+				vld = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_GET, request.Query);
 			else
 			{
-                msg += (msg.empty () ? "{" QUOTES "requests" QUOTES ":[\"" : ",\"") + itm.Query + QUOTES;
-				if (cnt < PIWIK_POST_BUNDLE && avl)
-					continue;
-				vld = dsp->SendRequest (itm.Host, itm.Path, PIWIK_METHOD_POST, msg + "]}");
+				string msg = "{\"requests\":[";
+				for (size_t i = 0; i < batch.size(); ++i)
+					msg += (i ? ",\"" : "\"") + batch[i].Query + "\"";
+				msg += "]}";
+				vld = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_POST, msg);
 			}
-
-			if (vld)
 			{
 				PiwikScopedLock lck (dsp->Mutex);
-				dsp->LastAcknowledged = itm.Serial;
+				if (vld) dsp->LastAcknowledged = batch.back().Serial;
+				else for (const auto& item : batch) dsp->Failures.push_back(item.Serial);
+				dsp->LastCompleted = batch.back().Serial;
 			}
-			else
-			{
-				dsp->Mutex.Activate ();
-				for (int i = 0; i < cnt; ++i)
-					dsp->Failures.push_back (grp[i]);
-				dsp->Mutex.Release ();
-			}
-
-			cnt = 0, msg.clear ();
+			dsp->CompletionChanged.notify_all();
 		}
 	}
 

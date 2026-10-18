@@ -58,6 +58,13 @@ enum PiwikQueryFormat
 	PIWIK_FORMAT_JSON
 };
 
+enum class PiwikFlushResult
+{
+    Success,
+    Failed,
+    TimedOut
+};
+
 enum PiwikLogLevel
 {
 	PIWIK_LOG_DEBUG,
