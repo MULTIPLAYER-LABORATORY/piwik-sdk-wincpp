@@ -74,7 +74,7 @@ certificate, and installs nothing in Windows certificate stores. Schannel uses a
 temporary Windows-managed private key that is removed on certificate disposal.
 No external server, firewall change, trusted certificate, or fixed port is needed.
 The `tls_integration` CTest entry runs the three handshake tests; these are
-separate from the 37 unit-test entries.
+separate from the unit-test entries.
 
 For an offline test build, supply an existing checkout of the pinned GoogleTest commit through `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path>`; the helper accepts extra configure options through `-ConfigureArguments`.
 
@@ -82,7 +82,7 @@ Network tests use the internal `piwik::detail::IHttpTransport` interface and an 
 
 The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, and broader shutdown/configuration thread-safety changes remain separate increments.
 
-Timing dependencies can be injected separately when session/retry behavior is tested. Known legacy behaviors such as omission of zero event values and action-dimension wire formatting should receive dedicated regression tests with their fixes rather than being declared correct by this migration.
+Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Action-dimension wire formatting remains a separate compatibility concern.
 
 GitHub Actions builds and tests x86/x64 Debug/Release using the VS2019 v142 toolset. CMake presets replace the old checked-in Visual Studio 2010 project files as the maintained build entry point. The historical Windows GUI sample source remains for reference.
 
@@ -125,4 +125,54 @@ does not disable TLS protocol or other security checks.
 For a private/self-signed deployment, trusting the issuing CA in Windows allows
 validation to remain enabled. Rebuild consumers with the updated headers and
 static library together when adopting this version.
+
+### Numeric event values
+
+Tracking numbers use a decimal point and no thousands separators regardless of
+the application's locale. Floating-point values retain round-trip precision on
+the wire, including fractional measurements and scientific notation.
+
+The existing `TrackEvent(..., float val = 0)` signature is unchanged: omitted
+values and zero continue to omit `e_v`. For an explicit zero or full double
+precision, use the low-level state API:
+
+```cpp
+PiwikState measurement;
+measurement.TrackedPath = _T("/startup");
+measurement.EventCategory = _T("Performance");
+measurement.EventAction = _T("Startup");
+measurement.EventName = _T("ui_ready_ms");
+measurement.SetEventValue(0.0); // A measured zero, serialized as e_v=0
+const int requestId = tracker.Track(measurement);
+```
+
+`SetEventValue(double)` records an explicit value; `ClearEventValue()` resets it
+to absent. Existing nonzero assignments to `EventValue` still serialize, and a
+direct zero assignment to a fresh state retains its legacy absent behavior.
+`EventValue` is now a double; consumers must rebuild their headers and static
+library together. The old convenience method still accepts float, so use the
+state API when double precision matters.
+
+NaN and positive/negative infinity are invalid for event values and revenue.
+`Track` and dispatcher `Submit` return zero without queuing a request for invalid
+numbers. `PiwikState::Serialize` throws `std::invalid_argument` for such states;
+`HasFiniteNumbers()` permits a preflight check. Negative finite event values remain
+supported. These rules do not change the application's global locale.
+
+### Legacy generation-time field (`gt_ms`)
+
+Matomo 4 stopped recording the old page-generation-time metric; historical data
+remains available in old reports. See the [Matomo platform changelog](https://developer.matomo.org/changelog).
+The SDK retains `AmountOfTime`, `PARAM_AMOUNT_OF_TIME`, and the `amountOfTime`
+arguments on legacy tracking methods for compatibility with older servers.
+The arguments on `TrackScreen`/`TrackAction` are seconds converted to integer
+milliseconds in `gt_ms`; the low-level `AmountOfTime` field is already milliseconds.
+
+This timing path is legacy-only. New application durations should use named
+numeric event values with a unit in the metric name, such as `ui_ready_ms` or
+`install_duration_ms`. There is no automatic conversion of legacy page/action
+requests into events, since that would change report meanings. Modern `pf_*`
+fields describe web-page performance and have different semantics from native
+application operation durations. Existing legacy wire output is retained and
+covered by a regression test; removal is deferred to a compatibility-breaking release.
 

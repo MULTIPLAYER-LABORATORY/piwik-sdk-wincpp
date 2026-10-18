@@ -18,6 +18,12 @@
 #include <stdlib.h>
 #include <string>
 #include <sstream>
+#include <cmath>
+#include <iomanip>
+#include <limits>
+#include <locale>
+#include <stdexcept>
+#include <type_traits>
 
 using namespace std;
 
@@ -28,7 +34,7 @@ private:
 	int Items;
 
 public:
-	PiwikQueryBuilder (PiwikQueryFormat frmt)  { Format = frmt; Items = 0; }
+	PiwikQueryBuilder (PiwikQueryFormat frmt)  { Format = frmt; Items = 0; imbue(std::locale::classic()); }
 
 	template <typename T> void AddParameter (LPCSTR nam, T val);
 	template <> void AddParameter<TSTRING> (LPCSTR nam, TSTRING val);
@@ -47,7 +53,20 @@ public:
 
 template <typename T> void PiwikQueryBuilder::AddParameter (LPCSTR nam, T val)
 {
-	*this << Prefix () << nam << Assign () << val;
+	if (std::is_floating_point<T>::value)
+	{
+		if (!std::isfinite(static_cast<long double>(val)))
+			throw std::invalid_argument("Tracking numbers must be finite");
+		std::ostringstream number;
+		number.imbue(std::locale::classic());
+		number << std::setprecision(std::numeric_limits<T>::max_digits10) << val;
+		std::string encoded = number.str();
+		// Both formats contain a query string. Escape an exponent's '+' so
+		// Matomo's query parser does not turn it into a space.
+		*this << Prefix () << nam << Assign () << PercentEncode(encoded);
+	}
+	else
+		*this << Prefix () << nam << Assign () << val;
 	Items++;
 }
 

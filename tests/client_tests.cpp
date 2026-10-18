@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+#include <limits>
+#include <sstream>
 #include "Piwik.h"
 
 // Construct the real client to verify the complete static library links, without
@@ -26,4 +28,48 @@ TEST(Client, CertificatePolicyIsIndependentForEachClient)
     first.SetVerifyServerCertificate(false);
     EXPECT_FALSE(first.VerifiesServerCertificate());
     EXPECT_TRUE(second.VerifiesServerCertificate());
+}
+
+TEST(Client, NonFiniteNumbersAreRejectedBeforeCreatingRequests)
+{
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDryRun(true);
+    for (float value : {std::numeric_limits<float>::quiet_NaN(),
+                       std::numeric_limits<float>::infinity(),
+                       -std::numeric_limits<float>::infinity()})
+    {
+        EXPECT_EQ(0, client.TrackEvent(_T("/startup"), _T("Performance"),
+            _T("Startup"), _T("ui_ready_ms"), value));
+        EXPECT_EQ(0, client.TrackGoal(_T("/goal"), 1, value));
+    }
+    EXPECT_FALSE(client.Flush()); // No worker or request was created.
+}
+
+TEST(Client, LowLevelExplicitZeroSurvivesClientEnrichment)
+{
+    std::wostringstream log; // Outlives the client and its logger.
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDispatchInterval(3600);
+    client.SetDryRun(true);
+    client.SetLogger(&log, PIWIK_LOG_DEBUG);
+    PiwikState state;
+    state.TrackedPath = _T("/startup");
+    state.EventCategory = _T("Performance");
+    state.EventAction = _T("Startup");
+    state.EventName = _T("ui_ready_ms");
+    state.SetEventValue(0.0);
+    EXPECT_GT(client.Track(state), 0);
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&e_v=0"));
+}
+
+TEST(Client, LegacyEventCallsStillOmitMissingAndZeroValues)
+{
+    std::wostringstream log;
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDispatchInterval(3600);
+    client.SetDryRun(true);
+    client.SetLogger(&log, PIWIK_LOG_DEBUG);
+    EXPECT_GT(client.TrackEvent(_T("/event"), _T("Demo"), _T("Open"), _T("omitted")), 0);
+    EXPECT_GT(client.TrackEvent(_T("/event"), _T("Demo"), _T("Open"), _T("zero"), 0.0f), 0);
+    EXPECT_EQ(std::wstring::npos, log.str().find(L"&e_v="));
 }

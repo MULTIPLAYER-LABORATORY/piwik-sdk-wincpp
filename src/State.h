@@ -48,7 +48,8 @@ struct PiwikState : public PiwikBasicState
 	TSTRING EventCategory;
 	TSTRING EventAction;
 	TSTRING EventName;
-	float EventValue;
+	double EventValue;
+	bool HasEventValue;
 	int Goal;
 	float Revenue;
 	TSTRING OutLink;
@@ -63,13 +64,19 @@ struct PiwikState : public PiwikBasicState
 	time_t FirstVisit;
 	time_t LastVisit;
 	int Random;
+    // Legacy gt_ms in milliseconds: unsupported by Matomo 4+.
+    // Retained for older servers; use an explicit event value for app durations.
     int AmountOfTime;
 
 	PiwikState (): NewSession(0), VisitCount(0), FirstVisit(0), LastVisit(0), 
-                   EventValue(0), Goal(0), Revenue(0), Random(0), AmountOfTime(0)
+                   EventValue(0), HasEventValue(false), Goal(0), Revenue(0), Random(0), AmountOfTime(0)
     {
     }
 								
+	void SetEventValue (double value);
+	void ClearEventValue ();
+	bool HasFiniteNumbers () const;
+	// Throws std::invalid_argument for a non-finite event value or revenue.
 	string Serialize (PiwikQueryFormat frmt);
 };
 

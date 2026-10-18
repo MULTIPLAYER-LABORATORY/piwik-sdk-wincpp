@@ -143,8 +143,9 @@
 // Only used if GOAL_ID is specified in the request.
 #define PARAM_REVENUE   "revenue"
 
-// The amount of time it took the server to generate this action, in milliseconds
-// This value is used to process the Page speed report Avg. generation time column.
+// LEGACY ONLY: page generation time in milliseconds, supported before Matomo 4.
+// Matomo 4+ no longer records this metric. Kept for older-server compatibility.
+// App operation durations belong in named event values with explicit units.
 #define PARAM_AMOUNT_OF_TIME   "gt_ms"
 
 // 32 character authorization key used to authenticate the API request.
