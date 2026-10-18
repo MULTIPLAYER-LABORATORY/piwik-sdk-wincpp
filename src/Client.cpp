@@ -491,12 +491,18 @@ bool PiwikClient::Flush ()
 	return (! Disabled && Dispatcher.Flush ());
 }
 
+PiwikFlushResult PiwikClient::FlushAndWait (std::chrono::milliseconds timeout)
+{
+	// Already-queued requests can be drained even after tracking is disabled.
+	// Do not hold the client lock while waiting: concurrent Track stays usable.
+	return Dispatcher.FlushAndWait(timeout);
+}
+
 // RequestStatus will return a code describing the outcome of a previous request as follows:
 // - positive if the request was successfully acknowledged by the server
 // - negative if the request failed
 // - zero if the outcome is still unknown
-// If a timeout is specified, the function will retry if necessary that many seconds.
-
+// If a timeout is specified, the function will poll for that many seconds.
 int PiwikClient::RequestStatus (int rqst, int wait)
 {
 	time_t t = time (0);

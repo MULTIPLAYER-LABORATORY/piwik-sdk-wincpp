@@ -95,6 +95,19 @@ TEST(Client, LegacyTrackActionUsesCorrectDimensionWireValues)
     EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension2=Win32%20%26%20HRESULT"));
 }
 
+TEST(Client, FlushAndWaitDrainsAlreadyQueuedWorkAfterTrackingIsDisabled)
+{
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDispatchInterval(3600);
+    client.SetDryRun(true);
+    EXPECT_EQ(PiwikFlushResult::Success, client.FlushAndWait(std::chrono::milliseconds(0)));
+    const int serial = client.TrackEvent(_T("/event"), _T("Demo"), _T("Open"));
+    ASSERT_GT(serial, 0);
+    client.SetDisabled(true);
+    EXPECT_EQ(PiwikFlushResult::Success, client.FlushAndWait(std::chrono::seconds(3)));
+    EXPECT_EQ(1, client.RequestStatus(serial));
+}
+
 TEST(Client, LegacyEventCallsStillOmitMissingAndZeroValues)
 {
     std::wostringstream log;

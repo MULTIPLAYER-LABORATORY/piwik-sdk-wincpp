@@ -338,7 +338,31 @@ These are the entry points provided by the Piwik tracking library:
 
 	``bool Flush ()``
 	
-	Allows to send all pending requests to the server. This is called implicitly when closing the Piwik instance.
+	Signals the dispatch worker without waiting for delivery. Retains its existing
+	return behavior; this is not proof that pending requests have completed.
+
+	``PiwikFlushResult FlushAndWait(std::chrono::milliseconds timeout)``
+
+	Captures the highest submitted request ID and waits for all requests through
+	that ID, including in-flight sends. Later requests cannot extend the target or
+	join its POST batch across that boundary. Completion notifications support
+	multiple concurrent waiters; a steady-clock deadline bounds waiting.
+
+	- ``Success``: all requests through the target finished successfully under the
+	  existing HTTP/dry-run classification; an empty client also succeeds.
+	- ``Failed``: the target finished with at least one failed request, or dispatch
+	  resources could not be started/signalled. Delivery failures are cumulative
+	  since client creation, including requests completed before this call.
+	- ``TimedOut``: some target requests remain unfinished at the deadline, even
+	  if other target requests have already failed.
+
+	Zero/negative timeouts signal dispatch and poll completion without waiting.
+	Already-queued work can be drained after ``SetDisabled(true)``. A timeout does
+	not cancel or retry sends; subsequent calls can observe completion. The legacy
+	destructor/shutdown policy is unchanged, so this is not a bound on total exit
+	time. Do not destroy the client concurrently with active calls. Rebuild headers
+	and library together. Use ``RequestStatus`` for individual request outcomes;
+	HTTP success does not prove Matomo ingestion of every bulk entry.
 	
 	``int  RequestStatus (int rqst, int wait = 0);``
 	

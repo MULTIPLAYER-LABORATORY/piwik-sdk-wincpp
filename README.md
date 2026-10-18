@@ -126,6 +126,50 @@ For a private/self-signed deployment, trusting the issuing CA in Windows allows
 validation to remain enabled. Rebuild consumers with the updated headers and
 static library together when adopting this version.
 
+### Waiting for queued delivery
+
+`Flush()` remains a nonblocking dispatch signal, not delivery confirmation. Use
+`FlushAndWait(std::chrono::milliseconds timeout)` when an application needs to
+wait for already-submitted telemetry, for example before destroying the client:
+
+```cpp
+const auto result = tracker.FlushAndWait(std::chrono::seconds(2));
+if (result == PiwikFlushResult::TimedOut) {
+    // Sends may still be running; decide how the application should proceed.
+}
+```
+
+The call captures the highest submitted request ID and wakes the worker. It
+waits for all requests through that ID, including in-flight requests. New requests
+do not extend its target or get added across that boundary to its POST batch.
+Concurrent callers can wait for their own captured targets. Waiting uses completion
+notifications and a steady-clock deadline, with no network polling loop.
+
+- `Success`: every request through the target completed with the SDK's existing
+  HTTP-level success classification (or dry-run acknowledgement).
+- `Failed`: those requests finished and at least one failed, or the worker could
+  not be started/signalled. Failures are cumulative since client creation and are
+  not cleared by flushing; a later success cannot hide an earlier failure.
+- `TimedOut`: the target did not finish before the wait deadline. This takes
+  precedence over known delivery failures when other target requests remain pending.
+
+An empty client returns `Success` without creating a worker. Zero/negative
+timeouts request dispatch and check completion without waiting. Disabling new
+tracking does not prevent this method from draining requests already queued.
+`RequestStatus(id)` still provides individual results. HTTP success does not prove
+Matomo stored every bulk entry; server ingestion/partial-response validation is
+separate work.
+
+Timeout does not cancel a request, retry it, or remove it from the queue. A later
+call can observe completion. This bounds the completion wait, not the entire
+client destructor: the legacy shutdown policy remains unchanged. Keep the client
+alive while calls are active and do not destroy it concurrently with tracking or
+waiting. Rebuild headers and the static library together after dispatcher changes.
+
+POST batches retain the existing size limit and now stop at GET/endpoint
+transitions, ensuring that every submitted request is actually sent to its
+captured host/path before being marked complete.
+
 ### Tracking application durations
 
 `TrackDuration` accepts a C++14 chrono duration and queues a Performance event

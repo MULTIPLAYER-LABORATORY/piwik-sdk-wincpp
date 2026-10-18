@@ -5,6 +5,7 @@
 #include <limits>
 #include <thread>
 #include <vector>
+#include <future>
 #include "Piwik.h"
 #include "HttpTransport.h"
 
@@ -29,6 +30,27 @@ HttpResponse Status(unsigned int code)
     response.statusCode = code;
     return response;
 }
+
+struct SendGate
+{
+    std::promise<void> entered, release;
+    std::shared_future<void> released = release.get_future().share();
+    std::atomic<bool> opened{false};
+    bool WaitEntered() { return entered.get_future().wait_for(std::chrono::seconds(3)) == std::future_status::ready; }
+    void Open() { if (!opened.exchange(true)) release.set_value(); }
+    HttpResponse Send()
+    {
+        entered.set_value();
+        EXPECT_EQ(std::future_status::ready, released.wait_for(std::chrono::seconds(5)));
+        return Status(204);
+    }
+};
+
+struct ReleaseSend
+{
+    std::shared_ptr<SendGate> gate;
+    ~ReleaseSend() { gate->Open(); }
+};
 
 class DispatcherTest : public ::testing::Test
 {
@@ -183,6 +205,176 @@ TEST_F(DispatcherTest, BulkBodyContainsEquivalentGetQueriesWithSpecialCharacters
     }
     EXPECT_THAT(captured.body, HasSubstr("&e_n=a%26b%3D%2B%25%22%5C%0A"));
     EXPECT_EQ("{\"requests\":[\"" + firstGetQuery + "\",\"" + secondGetQuery + "\"]}", captured.body);
+}
+
+TEST_F(DispatcherTest, FlushAndWaitSucceedsWithoutCreatingAWorkerForAnEmptyQueue)
+{
+    EXPECT_CALL(*transport, Send(_)).Times(0);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::milliseconds(0)));
+    EXPECT_FALSE(dispatcher->Flush());
+}
+
+TEST_F(DispatcherTest, FlushAndWaitCompletesSuccessfulBulkAndCanBeRepeated)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(204)));
+    auto state = Event();
+    const int first = dispatcher->Submit(state);
+    const int second = dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    EXPECT_EQ(1, dispatcher->RequestStatus(first));
+    EXPECT_EQ(1, dispatcher->RequestStatus(second));
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::milliseconds(0)));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitHandlesVeryLargeTimeoutWithoutOverflow)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(204)));
+    auto state = Event();
+    dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait((std::chrono::milliseconds::max)()));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitIncludesEarlierFailuresAfterLaterSuccess)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(500))).WillOnce(Return(Status(204)));
+    auto state = Event();
+    const int first = dispatcher->Submit(state);
+    const int second = dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    EXPECT_EQ(-1, dispatcher->RequestStatus(first));
+    EXPECT_EQ(1, dispatcher->RequestStatus(second));
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::milliseconds(0)));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitReportsTransportFailureAndDoesNotRetry)
+{
+    auto response = Status(0);
+    response.errorCode = ERROR_WINHTTP_TIMEOUT;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(response));
+    auto state = Event();
+    dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitWaitsForAnInflightRequest)
+{
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate](const HttpRequest&) { return gate->Send(); }));
+    auto state = Event();
+    const int serial = dispatcher->Submit(state);
+    auto wait = std::async(std::launch::async, [&] { return dispatcher->FlushAndWait(std::chrono::seconds(3)); });
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    EXPECT_EQ(std::future_status::timeout, wait.wait_for(std::chrono::milliseconds(0)));
+    EXPECT_EQ(0, dispatcher->RequestStatus(serial));
+    gate->Open();
+    EXPECT_EQ(PiwikFlushResult::Success, wait.get());
+}
+
+TEST_F(DispatcherTest, FlushAndWaitTimesOutWithoutCancellingTheSend)
+{
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate](const HttpRequest&) { return gate->Send(); }));
+    auto state = Event();
+    const int serial = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    const auto start = std::chrono::steady_clock::now();
+    EXPECT_EQ(PiwikFlushResult::TimedOut, dispatcher->FlushAndWait(std::chrono::milliseconds(20)));
+    EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(2));
+    EXPECT_EQ(PiwikFlushResult::TimedOut, dispatcher->FlushAndWait(std::chrono::milliseconds(-1)));
+    EXPECT_EQ(0, dispatcher->RequestStatus(serial));
+    gate->Open();
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitExcludesLaterRequestsEvenWhenTheirSendIsBlocked)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    auto first = std::make_shared<SendGate>();
+    auto later = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_))
+        .WillOnce(Invoke([first](const HttpRequest&) { return first->Send(); }))
+        .WillOnce(Invoke([later](const HttpRequest&) { return later->Send(); }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    auto wait = std::async(std::launch::async, [&] { return dispatcher->FlushAndWait(std::chrono::seconds(3)); });
+    ReleaseSend releaseFirst{first}, releaseLater{later};
+    ASSERT_TRUE(first->WaitEntered()); // FlushAndWait captured its target before starting this send.
+    const int laterId = dispatcher->Submit(state);
+    first->Open();
+    ASSERT_TRUE(later->WaitEntered());
+    ASSERT_EQ(std::future_status::ready, wait.wait_for(std::chrono::seconds(2)));
+    EXPECT_EQ(PiwikFlushResult::Success, wait.get());
+    EXPECT_EQ(0, dispatcher->RequestStatus(laterId));
+    later->Open();
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+}
+
+TEST_F(DispatcherTest, FlushAndWaitSeparatesPostBatchesForDifferentEndpoints)
+{
+    ::testing::InSequence sequence;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(L"example.invalid", request.host);
+        EXPECT_THAT(request.body, HasSubstr("&e_n=first"));
+        EXPECT_EQ(std::string::npos, request.body.find("&e_n=second"));
+        return Status(204);
+    }));
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(L"other.invalid", request.host);
+        EXPECT_THAT(request.body, HasSubstr("&e_n=second"));
+        return Status(204);
+    }));
+    auto first = Event(_T("first"));
+    dispatcher->Submit(first);
+    dispatcher->SetApiUrl(_T("https://other.invalid/piwik.php"));
+    auto second = Event(_T("second"));
+    dispatcher->Submit(second);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+}
+
+TEST_F(DispatcherTest, MultipleFlushWaitersReceiveCompletionNotifications)
+{
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate](const HttpRequest&) { return gate->Send(); }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    auto first = std::async(std::launch::async, [&] { return dispatcher->FlushAndWait(std::chrono::seconds(3)); });
+    auto second = std::async(std::launch::async, [&] { return dispatcher->FlushAndWait(std::chrono::seconds(3)); });
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    gate->Open();
+    EXPECT_EQ(PiwikFlushResult::Success, first.get());
+    EXPECT_EQ(PiwikFlushResult::Success, second.get());
+}
+
+TEST_F(DispatcherTest, FlushAndWaitDoesNotLosePostsAcrossMethodAndEndpointTransitions)
+{
+    ::testing::InSequence sequence;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(L"POST", request.method);
+        EXPECT_EQ(L"example.invalid", request.host);
+        return Status(204);
+    }));
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(L"GET", request.method);
+        return Status(204);
+    }));
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(L"POST", request.method);
+        EXPECT_EQ(L"other.invalid", request.host);
+        return Status(204);
+    }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    dispatcher->Submit(state);
+    dispatcher->SetRequestMethod(PIWIK_METHOD_POST);
+    ASSERT_TRUE(dispatcher->SetApiUrl(_T("https://other.invalid/piwik.php")));
+    dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
 }
 
 struct StatusCase { unsigned int code; int expected; };

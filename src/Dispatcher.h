@@ -24,6 +24,9 @@
 #include <deque>
 #include <vector>
 #include <ostream>
+#include <chrono>
+#include <condition_variable>
+#include <set>
 
 using namespace std;
 
@@ -56,6 +59,9 @@ private:
 	std::vector<int> Failures;
 	int SerialNumber;
 	int LastAcknowledged;
+	int LastCompleted;
+	std::condition_variable_any CompletionChanged;
+	std::multiset<int> FlushTargets;
 	PiwikLock Mutex;
 	PiwikLogger Logger;
 	HANDLE Service;
@@ -84,6 +90,7 @@ public:
 
 	int  Submit (PiwikState& st);
 	bool Flush ();
+	PiwikFlushResult FlushAndWait (std::chrono::milliseconds timeout);
 	int  RequestStatus (int rqst);
 
 private:
