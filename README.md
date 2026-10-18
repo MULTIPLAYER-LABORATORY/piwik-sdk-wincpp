@@ -67,7 +67,11 @@ GoogleTest/gMock 1.14.0 is pinned by commit and built in C++14 mode with the sam
 
 For an offline test build, supply an existing checkout of the pinned GoogleTest commit through `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path>`; the helper accepts extra configure options through `-ConfigureArguments`.
 
-Future network tests should introduce a small internal HTTP transport interface so requests and responses can be substituted without replacing the client or serializer. Timing dependencies can be injected separately when session/retry behavior is tested. Known legacy behaviors such as omission of zero event values and action-dimension wire formatting should receive dedicated regression tests with their fixes rather than being declared correct by this migration.
+Network tests use the internal `piwik::detail::IHttpTransport` interface and an owning injection constructor on `PiwikDispatcher`. Production uses `WinHttpTransport`; gMock supplies controlled responses while tests exercise real serialization, batching, and request-status handling. Transport headers are not installed as part of the application API. Public tracking methods remain nonvirtual. Tests cover GET/POST request construction, HTTP success/error classification, transport errors, dry runs, batch limits, and per-request outcomes. They use bounded completion checks rather than fixed scheduling sleeps.
+
+The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. Existing certificate bypass, HTTP-status-based success classification, no-retry behavior, and shutdown policy are retained in this extraction. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, certificate configuration, and broader shutdown/configuration thread-safety changes remain separate increments.
+
+Timing dependencies can be injected separately when session/retry behavior is tested. Known legacy behaviors such as omission of zero event values and action-dimension wire formatting should receive dedicated regression tests with their fixes rather than being declared correct by this migration.
 
 GitHub Actions builds and tests x86/x64 Debug/Release using the VS2019 v142 toolset. CMake presets replace the old checked-in Visual Studio 2010 project files as the maintained build entry point. The historical Windows GUI sample source remains for reference.
 

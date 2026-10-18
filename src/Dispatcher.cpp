@@ -15,12 +15,22 @@
 #include "Utilities.h"
 #include "State.h"
 #include "Dispatcher.h"
+#include "HttpTransport.h"
+#include <utility>
 
 // Configuration
 
 PiwikDispatcher::PiwikDispatcher ()
-: Session(0)
+: PiwikDispatcher(std::unique_ptr<piwik::detail::IHttpTransport>(
+    new piwik::detail::WinHttpTransport()))
 {
+}
+
+PiwikDispatcher::PiwikDispatcher (std::unique_ptr<piwik::detail::IHttpTransport> transport)
+: Transport(std::move(transport))
+{
+	if (!Transport)
+		Transport.reset(new piwik::detail::WinHttpTransport());
 	Method = PIWIK_BASIC_METHOD; 
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
 	DispatchInterval = PIWIK_DISPATCH_INTERVAL; 
@@ -170,10 +180,9 @@ bool PiwikDispatcher::LaunchService ()
 	Logger.Info (L"Starting Piwik dispatch service");
 
 	Running = true;
-	if ((Session = ::WinHttpOpen (L"Piwik Desktop Client", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)))
-		if ((Wake = ::CreateEvent (0, FALSE, FALSE, 0)))
-			if ((Service = (HANDLE) _beginthreadex (0, 0, ServiceRoutine, this, 0, 0)))
-				return true;
+	if ((Wake = ::CreateEvent (0, FALSE, FALSE, 0)))
+		if ((Service = (HANDLE) _beginthreadex (0, 0, ServiceRoutine, this, 0, 0)))
+			return true;
 
 	Logger.Error (L"Could not launch Piwik dispatch service");
 	return false;
@@ -195,8 +204,6 @@ void PiwikDispatcher::ShutdownService ()
 		CloseHandle (Service), Service = 0;
 	if (Wake)
 		CloseHandle (Wake), Wake = 0;
-	if (Session)
-		WinHttpCloseHandle (Session), Session = 0;
 }
 
 // Main dispatching routine run in the service thread
@@ -214,9 +221,14 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 	{
 		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval > 0 ? dsp->DispatchInterval * 1000 - 500 : INFINITE));
 		cnt = 0, msg.clear ();
-		while (dsp->Requests.size ())
+		while (true)
 		{
 			dsp->Mutex.Activate ();
+			if (dsp->Requests.empty ())
+			{
+				dsp->Mutex.Release ();
+				break;
+			}
 			itm = dsp->Requests.front ();
 			dsp->Requests.pop_front ();
 			avl = dsp->Requests.size ();
@@ -235,7 +247,10 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			}
 
 			if (vld)
+			{
+				PiwikScopedLock lck (dsp->Mutex);
 				dsp->LastAcknowledged = itm.Serial;
+			}
 			else
 			{
 				dsp->Mutex.Activate ();
@@ -254,93 +269,44 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 
 bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry)
 {
-	HINTERNET Connection = 0, Request = 0;
-	wchar_t* verb;
-	void* data;
-	DWORD size;
-	DWORD code = 0;
-	DWORD opts;
-	int rsl;
-	bool vld;
+    if (DryRun)
+    {
+        Logger.Log (L"DRYRUN - Not sending request: ", qry.c_str ());
+        return true;
+    }
 
-	if (DryRun)
-	{
-		Logger.Log (L"DRYRUN - Not sending request: ", qry.c_str ());
-		return true;
-	}
+    piwik::detail::HttpRequest request;
+    request.host = host;
+    request.path = path;
+    request.secure = Secure;
+    request.headers = L"Content-Type:application/json;charset=UTF-8\r\n";
+    if (mth == PIWIK_METHOD_GET)
+    {
+        request.method = L"GET";
+        request.path += ToWide(qry);
+    }
+    else
+    {
+        request.method = L"POST";
+        request.body = qry;
+    }
 
-	if (mth == PIWIK_METHOD_GET)
-	{
-		verb = L"GET";
-		path += ToWide (qry);
-		data = 0, size = 0;
-	}
-	else
-	{
-		verb = L"POST";
-		data = (void*) qry.data (), size = qry.size ();
-	}
-
-	Connection = ::WinHttpConnect (Session, host.c_str (), INTERNET_DEFAULT_PORT, 0); 
-	if (! Connection)
-	{
-		Logger.Error (L"Could not open HTTP connection", 0, GetLastError ());
-		return false;
-	}
-
-	Request = ::WinHttpOpenRequest (Connection, verb, path.c_str (), 0, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 
-									WINHTTP_FLAG_ESCAPE_DISABLE_QUERY | WINHTTP_FLAG_REFRESH | (Secure ? WINHTTP_FLAG_SECURE : 0));
-	if (! Request)
-	{
-		Logger.Error (L"Could not create HTTP request", 0, GetLastError ());
-		::WinHttpCloseHandle (Connection);
-		return false;
-	}
-	
-	opts = SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
-	::WinHttpSetOption (Request, WINHTTP_OPTION_SECURITY_FLAGS, &opts, sizeof opts);
-
-	rsl = ::WinHttpSendRequest (Request, L"Content-Type:application/json;charset=UTF-8\r\n", -1, data, size, size, 0);
-	if (! rsl)
-	{
-		Logger.Error (L"Could not send HTTP request", 0, GetLastError ());
-		::WinHttpCloseHandle (Request);
-		::WinHttpCloseHandle (Connection);
-		return false;
-	}
-
-	rsl = ::WinHttpReceiveResponse (Request, 0) && 
-		  ::WinHttpQueryHeaders (Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
-				                          WINHTTP_HEADER_NAME_BY_INDEX, &code, &(size = sizeof code), WINHTTP_NO_HEADER_INDEX);
-	if (rsl && code / 100 == 2)
-	{
-		#ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
-			ReadResponse (Request);
-		#endif
-		Logger.Debug (L"Sent HTTP request: ", qry.c_str ());
-		vld = true;
-	}
-	else
-	{
-		Logger.Error (L"Unexpected HTTP response", 0, code);
-		vld = false;
-	}
-
-	::WinHttpCloseHandle (Request);
-	::WinHttpCloseHandle (Connection);
-	
-	return vld;
+    const auto response = Transport->Send(request);
+    if (response.errorCode != ERROR_SUCCESS || !response.errorMessage.empty())
+    {
+        Logger.Error(response.errorMessage.empty() ? L"HTTP transport failed" :
+            response.errorMessage.c_str(), 0, response.errorCode);
+        return false;
+    }
+    if (response.statusCode / 100 != 2)
+    {
+        Logger.Error(L"Unexpected HTTP response", 0, response.statusCode);
+        return false;
+    }
+#ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
+    if (!response.body.empty())
+        Logger.Log(L"Response: ", response.body.c_str());
+#endif
+    Logger.Debug(L"Sent HTTP request: ", qry.c_str());
+    return true;
 }
-
-void PiwikDispatcher::ReadResponse (HINTERNET rqst)
-{
-	DWORD size = 0, wrt = 0;
-	if (::WinHttpQueryDataAvailable (rqst, &size) && size > 0)
-	{
-		LPSTR rsp = (LPSTR) malloc (size + 2); memset (rsp, 0, size + 2);
-		::WinHttpReadData (rqst, (void*) rsp, size, &wrt);
-		Logger.Log (L"Response: ", rsp);
-		free (rsp);
-	}
-}
-

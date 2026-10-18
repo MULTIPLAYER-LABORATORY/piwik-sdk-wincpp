@@ -12,5 +12,18 @@
   Windows CI matrix using the v142 compiler toolset.
 - Add a PowerShell helper for initializing MSVC and running the presets.
 
-This increment does not change tracking semantics or add the proposed performance,
-structured-error, HTTP transport injection, or delivery-reliability features.
+### Internal HTTP transport and delivery tests
+
+- Extract WinHTTP behind `piwik::detail::IHttpTransport`, with owned transport
+  injection at the dispatcher and RAII ownership of WinHTTP handles.
+- Open the HTTP session on first send, allowing mock-only tests and dry runs
+  without initializing WinHTTP.
+- Add gMock delivery tests for GET/POST construction, HTTP and network errors,
+  dry runs, batched outcomes, bundle limits, and failure followed by success.
+- Synchronize queue emptiness and acknowledged status, and make the worker
+  running flag atomic so completion checks do not race those fields.
+
+This extraction retains the existing certificate bypass, response-status policy,
+no-retry behavior, and shutdown policy. Performance and structured-error features
+remain planned work. Installed static-library consumers must rebuild against the
+updated headers and library together.

@@ -14,7 +14,8 @@
 #pragma once
 
 #include <windows.h>
-#include <winhttp.h>
+#include <atomic>
+#include <memory>
 #include <tchar.h>
 #include <stdlib.h>
 #include <time.h>
@@ -25,6 +26,8 @@
 #include <ostream>
 
 using namespace std;
+
+namespace piwik { namespace detail { class IHttpTransport; }}
 
 class PiwikDispatcher
 {
@@ -46,7 +49,7 @@ private:
 	bool Secure;
 	bool DryRun;
 	bool Synchronous;
-	bool Running;
+	std::atomic<bool> Running;
 
 	std::deque<Request> Requests;
 	std::vector<int> Failures;
@@ -56,10 +59,12 @@ private:
 	PiwikLogger Logger;
 	HANDLE Service;
 	HANDLE Wake;
-	HINTERNET Session;
+	std::unique_ptr<piwik::detail::IHttpTransport> Transport;
 
 public:
 	PiwikDispatcher ();
+	// Internal injection point; the dispatcher owns its transport.
+	explicit PiwikDispatcher (std::unique_ptr<piwik::detail::IHttpTransport> transport);
 	~PiwikDispatcher ();
 
 	TSTRING CurrentApiUrl ();
@@ -83,6 +88,5 @@ private:
 	void ShutdownService ();
 	static unsigned __stdcall ServiceRoutine (void*);
 	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
-	void ReadResponse (HINTERNET rqst);
 };
 
