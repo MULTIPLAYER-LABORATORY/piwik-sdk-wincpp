@@ -80,7 +80,7 @@ For an offline test build, supply an existing checkout of the pinned GoogleTest 
 
 Network tests use the internal `piwik::detail::IHttpTransport` interface and an owning injection constructor on `PiwikDispatcher`. Production uses `WinHttpTransport`; gMock supplies controlled responses while tests exercise real serialization, batching, and request-status handling. Transport headers are not installed as part of the application API. Public tracking methods remain nonvirtual. Tests cover GET/POST request construction, HTTP success/error classification, transport errors, dry runs, batch limits, and per-request outcomes. They use bounded completion checks rather than fixed scheduling sleeps.
 
-The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, and broader shutdown/configuration thread-safety changes remain separate increments.
+The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. GET/bulk query encoding and bulk JSON construction have regression coverage. Retry logic, interpretation of partial failures in server bulk responses, and broader shutdown/configuration thread-safety changes remain separate increments.
 
 Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Custom dimension values use URL encoding in both GET and bulk requests.
 
@@ -125,6 +125,33 @@ does not disable TLS protocol or other security checks.
 For a private/self-signed deployment, trusting the issuing CA in Windows allows
 validation to remain enabled. Rebuild consumers with the updated headers and
 static library together when adopting this version.
+
+### Request encoding
+
+Pass strings in their original form. The SDK URL-encodes query values for both
+GET requests and each query string in a bulk POST, as required by the
+[Matomo Tracking API](https://developer.matomo.org/api-reference/tracking-api).
+For example, an event name `a&b=+%` is sent as `e_n=a%26b%3D%2B%25` and arrives
+as the original value after one query decode. Quotes, backslashes, control
+characters, and literal percent escapes are preserved without introducing extra
+parameters. Unicode builds convert text to UTF-8 before encoding; ANSI builds
+retain their byte-string behavior.
+
+Custom variable collections (`cvar` and `_cvar`) are first serialized as JSON,
+with their names and values JSON-escaped, then URL-encoded as one query value.
+Sparse variable slots retain their original one-based indices.
+
+`PiwikState::Serialize(PIWIK_FORMAT_URL)` and `Serialize(PIWIK_FORMAT_JSON)` now
+return the same encoded query string. The latter is a bulk-array entry, not an
+entire JSON document; the dispatcher supplies the outer `requests` object.
+Encoded queries contain only ASCII characters safe inside JSON strings.
+
+This corrects old bulk encoding and GET custom-variable JSON. Requests containing
+special characters may now produce corrected report values where old requests
+were corrupted or rejected. Tracking signatures and parameter names are unchanged.
+Tests check decoded GET/bulk equivalence and captured bulk bodies without requiring
+a live Matomo instance; server-side ingestion and reports still need deployment
+validation.
 
 ### Numeric event values
 

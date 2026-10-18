@@ -78,6 +78,7 @@ struct PiwikState : public PiwikBasicState
 	void ClearEventValue ();
 	bool HasFiniteNumbers () const;
 	// Throws std::invalid_argument for a non-finite event value or revenue.
+	// Both formats return a URL-encoded query; bulk mode embeds it in JSON.
 	string Serialize (PiwikQueryFormat frmt);
 };
 

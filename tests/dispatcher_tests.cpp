@@ -155,6 +155,36 @@ TEST_F(DispatcherTest, BulkEventsKeepIndependentErrorContextSnapshots)
     EXPECT_THAT(captured.body, HasSubstr("&dimension1=success&dimension2=none&dimension3=none\"]}"));
 }
 
+TEST_F(DispatcherTest, BulkBodyContainsEquivalentGetQueriesWithSpecialCharacters)
+{
+    HttpRequest captured;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([&](const HttpRequest& request) {
+        captured = request;
+        return Status(204);
+    }));
+    auto first = Event(_T("a&b=+%\"\\\n"));
+    first.TrackedPath = _T("https://example.invalid/?a=1&b=2");
+    first.UserVariables.Items[2].Set(_T("name\""), _T("value&=+%\\\n"));
+    first.ScreenVariables = first.UserVariables;
+    auto second = Event(_T("literal%26+"));
+    second.ActionDimensions.Set(2, _T("Win32 & HRESULT"));
+    const auto firstGetQuery = first.Serialize(PIWIK_FORMAT_URL);
+    const auto secondGetQuery = second.Serialize(PIWIK_FORMAT_URL);
+    const int firstId = dispatcher->Submit(first);
+    const int secondId = dispatcher->Submit(second);
+    ASSERT_TRUE(dispatcher->Flush());
+    ExpectStatus(secondId, 1);
+    ExpectStatus(firstId, 1);
+    // No inner quote/backslash/control bytes remain to break the outer JSON.
+    for (const auto& query : {firstGetQuery, secondGetQuery})
+    {
+        EXPECT_EQ(std::string::npos, query.find_first_of("\"\\\r\n\t"));
+        for (unsigned char byte : query) { EXPECT_GE(byte, 0x20); EXPECT_LT(byte, 0x7F); }
+    }
+    EXPECT_THAT(captured.body, HasSubstr("&e_n=a%26b%3D%2B%25%22%5C%0A"));
+    EXPECT_EQ("{\"requests\":[\"" + firstGetQuery + "\",\"" + secondGetQuery + "\"]}", captured.body);
+}
+
 struct StatusCase { unsigned int code; int expected; };
 class DeliveryStatusTest : public DispatcherTest,
     public ::testing::WithParamInterface<StatusCase> {};

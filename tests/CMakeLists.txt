@@ -1,4 +1,4 @@
-add_executable(sdk_tests serialization_tests.cpp encoding_tests.cpp numeric_tests.cpp dimension_tests.cpp client_tests.cpp dispatcher_tests.cpp)
+add_executable(sdk_tests serialization_tests.cpp encoding_tests.cpp query_encoding_tests.cpp numeric_tests.cpp dimension_tests.cpp client_tests.cpp dispatcher_tests.cpp)
 target_link_libraries(sdk_tests PRIVATE Matomo::SDK GTest::gmock_main)
 target_compile_options(sdk_tests PRIVATE /utf-8 /EHsc)
 include(GoogleTest)

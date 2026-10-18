@@ -17,6 +17,12 @@ int main()
     if (measurement.Serialize(PIWIK_FORMAT_JSON).find("&dimension2=Win32") == std::string::npos) return 8;
     if (!measurement.ActionDimensions.Remove(2)) return 9;
     measurement.ActionDimensions.Clear();
+    measurement.EventName = _T("a&b=+%\"\\\n");
+    measurement.ScreenVariables.Items[0].Set(_T("name\""), _T("value&+"));
+    const auto query = measurement.Serialize(PIWIK_FORMAT_JSON);
+    if (query != measurement.Serialize(PIWIK_FORMAT_URL)) return 10;
+    if (query.find("&e_n=a%26b%3D%2B%25%22%5C%0A") == std::string::npos) return 11;
+    if (query.find("&cvar=%7B%22") == std::string::npos) return 12;
     return client.CurrentSiteId() == 7 && client.UsesSecureConnection() &&
         client.VerifiesServerCertificate() ? 0 : 3;
 }

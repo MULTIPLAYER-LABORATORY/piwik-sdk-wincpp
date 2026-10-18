@@ -191,7 +191,8 @@ string PercentEncode (string& src)
         unsigned char c = (*i);
 
         // Keep alphanumeric and other accepted characters intact
-        if (isalnum (c) || c == '-' || c == '_' || c == '.' || c == '~') 
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
             os << c;
 		// Any other characters are percent-encoded
 		else

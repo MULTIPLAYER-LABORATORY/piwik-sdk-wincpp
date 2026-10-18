@@ -57,10 +57,10 @@ TEST(Serialization, VisitDimensionsUseConfiguredIdsAndEncodeValues)
     EXPECT_NE(std::string::npos, query.find("&dimension2=Windows%20%26%20app"));
 }
 
-TEST(Serialization, BulkRequestStringEscapesQuotesAndBackslashes)
+TEST(Serialization, BulkRequestStringUrlEncodesQuotesAndBackslashes)
 {
     auto state = BasicState();
     state.EventName = _T("a\"b\\c");
     const auto query = state.Serialize(PIWIK_FORMAT_JSON);
-    EXPECT_NE(std::string::npos, query.find("&e_n=a\\\"b\\\\c"));
+    EXPECT_NE(std::string::npos, query.find("&e_n=a%22b%5Cc"));
 }
