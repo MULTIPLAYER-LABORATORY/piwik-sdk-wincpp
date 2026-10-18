@@ -27,3 +27,8 @@
 *.exe
 *.out
 *.app
+
+# CMake builds, installed packages, and local presets
+/out/
+/CMakeUserPresets.json
+/.vs/

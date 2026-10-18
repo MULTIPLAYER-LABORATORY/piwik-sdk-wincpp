@@ -1,0 +1,26 @@
+name: Build and test
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  windows:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86, x64]
+        configuration: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+          toolset: '14.29'
+      - name: Configure
+        run: cmake --preset windows-${{ matrix.arch }}-${{ matrix.configuration }}
+      - name: Build
+        run: cmake --build --preset windows-${{ matrix.arch }}-${{ matrix.configuration }}
+      - name: Test
+        run: ctest --preset windows-${{ matrix.arch }}-${{ matrix.configuration }}
+      - name: Install
+        run: cmake --install out/build/windows-${{ matrix.arch }}-${{ matrix.configuration }}
+      - name: Verify installed package
+        run: cmake -DSDK_BUILD_DIR=out/build/windows-${{ matrix.arch }}-${{ matrix.configuration }} -P tests/package_consumer/verify.cmake

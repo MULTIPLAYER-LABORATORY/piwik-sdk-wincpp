@@ -13,10 +13,10 @@
 
 #pragma once
 
-#include "../src/Config.h"
-#include "../src/Utilities.h"
-#include "../src/State.h"
-#include "../src/Dispatcher.h"
-#include "../src/Client.h"
+#include "Config.h"
+#include "Utilities.h"
+#include "State.h"
+#include "Dispatcher.h"
+#include "Client.h"
 
 

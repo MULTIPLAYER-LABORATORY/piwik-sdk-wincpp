@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.21)
+project(MatomoPackageConsumer LANGUAGES CXX)
+find_package(MatomoSDK CONFIG REQUIRED)
+add_executable(package_consumer main.cpp)
+target_link_libraries(package_consumer PRIVATE Matomo::SDK)
+target_compile_options(package_consumer PRIVATE /EHsc)
