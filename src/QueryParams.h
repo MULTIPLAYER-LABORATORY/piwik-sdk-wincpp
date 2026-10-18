@@ -205,6 +205,9 @@
 // see http://piwik.org/docs/event-tracking/
 #define PARAM_EVENT_VALUE   "e_v"
 
+// Mark non-pageview requests as custom actions.
+#define PARAM_CUSTOM_ACTION "ca"
+
 // Ecommerce parameters
 
 // Items in your cart or order for ecommerce tracking

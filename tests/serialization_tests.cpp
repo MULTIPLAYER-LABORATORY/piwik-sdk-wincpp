@@ -57,6 +57,18 @@ TEST(Serialization, VisitDimensionsUseConfiguredIdsAndEncodeValues)
     EXPECT_NE(std::string::npos, query.find("&dimension2=Windows%20%26%20app"));
 }
 
+TEST(Serialization, CustomActionIsOptInForLowLevelStatesInBothFormats)
+{
+    auto state = BasicState();
+    for (auto format : {PIWIK_FORMAT_URL, PIWIK_FORMAT_JSON})
+    {
+        EXPECT_EQ(std::string::npos, state.Serialize(format).find("&ca="));
+        state.CustomAction = true;
+        EXPECT_NE(std::string::npos, state.Serialize(format).find("&ca=1"));
+        state.CustomAction = false;
+    }
+}
+
 TEST(Serialization, BulkRequestStringUrlEncodesQuotesAndBackslashes)
 {
     auto state = BasicState();
