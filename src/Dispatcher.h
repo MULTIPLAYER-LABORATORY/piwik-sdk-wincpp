@@ -27,6 +27,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <set>
+#include <mutex>
 
 using namespace std;
 
@@ -47,13 +48,16 @@ private:
 	TSTRING ApiUrl;
 	wstring ApiHost, ApiPath;
 	PiwikMethod Method;
-	int ConnectionTimeout;
+	std::atomic<int> ConnectionTimeout;
 	int DispatchInterval;
 	bool Secure;
 	std::atomic<bool> VerifyServerCertificate{true};
 	bool DryRun;
 	bool Synchronous;
-	std::atomic<bool> Running;
+	bool Accepting = true;
+	bool Stopping = false;
+	std::mutex ShutdownMutex;
+	std::shared_ptr<std::atomic<bool>> Cancellation = std::make_shared<std::atomic<bool>>(false);
 
 	std::deque<Request> Requests;
 	std::vector<int> Failures;
@@ -91,11 +95,11 @@ public:
 	int  Submit (PiwikState& st);
 	bool Flush ();
 	PiwikFlushResult FlushAndWait (std::chrono::milliseconds timeout);
+	PiwikFlushResult Shutdown (PiwikShutdownMode mode = PiwikShutdownMode::Drain);
 	int  RequestStatus (int rqst);
 
 private:
 	bool LaunchService ();
-	void ShutdownService ();
 	static unsigned __stdcall ServiceRoutine (void*);
 	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
 };

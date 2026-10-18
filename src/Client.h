@@ -97,5 +97,6 @@ public:
 	int  Track (PiwikState& st);
 	bool Flush ();
 	PiwikFlushResult FlushAndWait (std::chrono::milliseconds timeout);
+	PiwikFlushResult Shutdown (PiwikShutdownMode mode = PiwikShutdownMode::Drain);
 	int  RequestStatus (int rqst, int wait = 0);
 };

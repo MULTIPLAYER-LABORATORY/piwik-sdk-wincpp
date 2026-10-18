@@ -108,6 +108,21 @@ TEST(Client, FlushAndWaitDrainsAlreadyQueuedWorkAfterTrackingIsDisabled)
     EXPECT_EQ(1, client.RequestStatus(serial));
 }
 
+TEST(Client, ShutdownDrainsAndCannotBeReopenedByEnablingTracking)
+{
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDryRun(true);
+    client.SetDispatchInterval(3600);
+    const int serial = client.TrackEvent(_T("/event"), _T("Demo"), _T("Open"));
+    EXPECT_GT(serial, 0);
+    EXPECT_EQ(PiwikFlushResult::Success, client.Shutdown());
+    EXPECT_EQ(1, client.RequestStatus(serial));
+    EXPECT_TRUE(client.IsDisabled());
+    client.SetDisabled(false);
+    EXPECT_EQ(0, client.TrackEvent(_T("/event"), _T("Demo"), _T("Open")));
+    EXPECT_EQ(PiwikFlushResult::Success, client.Shutdown());
+}
+
 TEST(Client, LegacyEventCallsStillOmitMissingAndZeroValues)
 {
     std::wostringstream log;

@@ -65,6 +65,12 @@ enum class PiwikFlushResult
     TimedOut
 };
 
+enum class PiwikShutdownMode
+{
+    Drain,
+    DiscardPending
+};
+
 enum PiwikLogLevel
 {
 	PIWIK_LOG_DEBUG,

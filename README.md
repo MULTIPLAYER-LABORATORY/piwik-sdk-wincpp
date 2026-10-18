@@ -65,22 +65,23 @@ For a Visual Studio application using its own project files, add the installed `
 
 GoogleTest/gMock 1.14.0 is pinned by commit and built in C++14 mode with the same runtime as the SDK. Tests cover encoding, Unicode conversion, event serialization, visit dimensions, optional fields, and linking/configuring the real client. The helper and CI also install a package into an isolated directory, build a standalone consumer with `find_package`, and run it. Tests do not contact Matomo or write visitor registry state. Public tracking methods remain nonvirtual.
 
-CTest also runs three real WinHTTP TLS checks through a temporary loopback server
+CTest also runs four real WinHTTP TLS checks through a temporary loopback server
 on an automatically assigned port: rejection of an untrusted certificate,
 successful delivery with explicit opt-out, and rejection after restoring
-validation on the same transport. The fixture uses PowerShell (`pwsh`, or Windows
+validation on the same transport, and timeout of a deliberately stalled response.
+The fixture uses PowerShell (`pwsh`, or Windows
 PowerShell with the required .NET certificate APIs), generates its own untrusted
 certificate, and installs nothing in Windows certificate stores. Schannel uses a
 temporary Windows-managed private key that is removed on certificate disposal.
 No external server, firewall change, trusted certificate, or fixed port is needed.
-The `tls_integration` CTest entry runs the three handshake tests; these are
+The `tls_integration` CTest entry runs the three certificate tests and one timeout test; these are
 separate from the unit-test entries.
 
 For an offline test build, supply an existing checkout of the pinned GoogleTest commit through `-DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=<path>`; the helper accepts extra configure options through `-ConfigureArguments`.
 
 Network tests use the internal `piwik::detail::IHttpTransport` interface and an owning injection constructor on `PiwikDispatcher`. Production uses `WinHttpTransport`; gMock supplies controlled responses while tests exercise real serialization, batching, and request-status handling. Transport headers are not installed as part of the application API. Public tracking methods remain nonvirtual. Tests cover GET/POST request construction, HTTP success/error classification, transport errors, dry runs, batch limits, and per-request outcomes. They use bounded completion checks rather than fixed scheduling sleeps.
 
-The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. GET/bulk query encoding and bulk JSON construction have regression coverage. Retry logic, interpretation of partial failures in server bulk responses, and broader shutdown/configuration thread-safety changes remain separate increments.
+The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification and no-retry behavior are retained. Shutdown now cooperatively joins the worker, as described below. Certificate validation defaults to enabled, with an explicit per-client opt-out. Queue/status accesses and terminal shutdown state are synchronized. GET/bulk query encoding and bulk JSON construction have regression coverage. Retry logic, interpretation of partial failures in server bulk responses, and broader configuration thread-safety changes remain separate increments.
 
 Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Custom dimension values use URL encoding in both GET and bulk requests.
 
@@ -162,13 +163,66 @@ separate work.
 
 Timeout does not cancel a request, retry it, or remove it from the queue. A later
 call can observe completion. This bounds the completion wait, not the entire
-client destructor: the legacy shutdown policy remains unchanged. Keep the client
-alive while calls are active and do not destroy it concurrently with tracking or
-waiting. Rebuild headers and the static library together after dispatcher changes.
+client destructor; cooperative shutdown below owns the final join. Keep the
+client alive while calls are active and do not destroy it concurrently with
+tracking or waiting. Rebuild headers and the static library together after dispatcher changes.
 
 POST batches retain the existing size limit and now stop at GET/endpoint
 transitions, ensuring that every submitted request is actually sent to its
 captured host/path before being marked complete.
+
+### Cooperative shutdown
+
+`Shutdown(PiwikShutdownMode mode = PiwikShutdownMode::Drain)` permanently closes
+the client to new requests, wakes its worker, waits for it to finish, and closes
+thread/wake handles only after the join. The destructor uses `Drain` automatically.
+There is no fixed startup sleep or forced `TerminateThread` fallback.
+
+- `Drain` sends already-queued work and lets in-flight sends finish.
+- `DiscardPending` marks unsent queued requests failed and requests cooperative
+  cancellation of the in-flight send between WinHTTP phases. It still joins that
+  worker; it never abandons a thread using client resources.
+
+```cpp
+// Optional earlier bounded wait; a timeout alone does not cancel anything.
+const auto flushed = tracker.FlushAndWait(std::chrono::seconds(2));
+const auto stopped = tracker.Shutdown(
+    flushed == PiwikFlushResult::TimedOut
+        ? PiwikShutdownMode::DiscardPending : PiwikShutdownMode::Drain);
+```
+
+Shutdown returns cumulative `Success` or `Failed`, using the existing HTTP/dry-run
+classification and counting discarded requests as failures. It does not return
+`TimedOut`: joining is required for safe resource ownership. `RequestStatus` and
+`FlushAndWait` remain usable for results. Further tracking returns zero, even if
+`SetDisabled(false)` is called; create a new client to resume tracking. Repeated
+shutdown calls are safe, and concurrent shutdown calls are serialized. The first
+call's policy governs its join; a later call does not interrupt a drain in progress.
+
+`SetConnectionTimeout(int seconds)` now reaches WinHTTP and sets **each** resolve,
+connect, send, and receive phase timeout (default five seconds). Values must be
+positive and fit in signed milliseconds; invalid values are ignored and logged
+when logging is configured. Settings apply to subsequent sends; a send already
+in progress retains its timeout snapshot. The response-header completion timeout
+is also configured explicitly. WinHTTP timers have coarse enforcement and can
+report a timeout later than the configured duration; they are not precise clocks.
+
+These phase limits are not an overall shutdown deadline: draining many batches
+can take longer, and an active synchronous WinHTTP operation must return before
+cancellation can be observed. Cancellation cannot retract data already accepted
+by the server. Handles are never closed concurrently with blocked operations, following Microsoft's
+[WinHTTP concurrency rules](https://learn.microsoft.com/en-us/windows/win32/winhttp/concurrency-in-winhttp)
+and [timeout API](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpsettimeouts).
+No retry is introduced.
+
+Keep the object alive until all calls have returned. Do not destroy it concurrently
+with other calls, or invoke shutdown/destruction from a transport/logger callback
+on its own worker. Internal custom transports must eventually return and honor
+the timeout/cancellation contract. An OS-level join error throws `std::system_error`
+without releasing worker-owned resources; ordinary HTTP failures return `Failed`.
+Rebuild headers and the static library together. `PIWIK_SHUTDOWN_WAIT` remains a
+legacy constant and no longer imposes a forced-kill deadline. Live Matomo ingestion
+remains untested.
 
 ### Tracking application durations
 

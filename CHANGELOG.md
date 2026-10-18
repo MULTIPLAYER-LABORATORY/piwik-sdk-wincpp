@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Cooperative shutdown and finite HTTP phase timeouts
+
+- Add terminal `Shutdown(Drain | DiscardPending)`, defaulting to drain in the
+  destructor. Stop submissions, wake/join the worker, then release handles.
+  Remove `TerminateThread` and the startup sleep, including immediate-start exits.
+- Mark discarded queued IDs failed, request cooperative in-flight cancellation
+  between synchronous WinHTTP phases, and notify completion waiters. Never close
+  an in-use WinHTTP handle from another thread or abandon its owning worker.
+- Wire `SetConnectionTimeout` to positive finite resolve/connect/send/receive
+  phase limits and header completion, default five seconds; reject invalid/
+  overflowing settings. Document WinHTTP's coarse timeout enforcement.
+- Preserve cumulative status reporting, explicit flush timeout behavior, and no
+  retries. Shutdown has no hard total deadline; cancellation cannot retract data.
+  Rebuild consumers with updated headers/library. The legacy shutdown-wait
+  constant no longer controls forced termination.
+- Add shutdown/lifetime/policy/cancellation/timeout regression coverage and a real
+  WinHTTP stalled-response timeout check in the local TLS fixture. Live Matomo
+  ingestion remains separate validation.
+
 ### Bounded delivery waits
 
 - Add `FlushAndWait(std::chrono::milliseconds)` returning `PiwikFlushResult`

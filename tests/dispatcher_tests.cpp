@@ -377,6 +377,170 @@ TEST_F(DispatcherTest, FlushAndWaitDoesNotLosePostsAcrossMethodAndEndpointTransi
     EXPECT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
 }
 
+TEST_F(DispatcherTest, ShutdownDrainIsTerminalAndReportsDeliveryFailure)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(500)));
+    auto state = Event();
+    const int serial = dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->Shutdown());
+    EXPECT_EQ(-1, dispatcher->RequestStatus(serial));
+    EXPECT_EQ(0, dispatcher->Submit(state));
+    EXPECT_FALSE(dispatcher->Flush());
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::milliseconds(0)));
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->Shutdown());
+}
+
+TEST_F(DispatcherTest, ShutdownDiscardMarksQueuedRequestsFailedWithoutSending)
+{
+    EXPECT_CALL(*transport, Send(_)).Times(0);
+    auto state = Event();
+    const int first = dispatcher->Submit(state);
+    const int second = dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->Shutdown(PiwikShutdownMode::DiscardPending));
+    EXPECT_EQ(-1, dispatcher->RequestStatus(first));
+    EXPECT_EQ(-1, dispatcher->RequestStatus(second));
+    EXPECT_EQ(0, dispatcher->Submit(state));
+    EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->Shutdown(PiwikShutdownMode::Drain));
+}
+
+TEST_F(DispatcherTest, DestructorDrainsQueuedRequestsEvenImmediatelyAfterStartingWorker)
+{
+    bool delivered = false;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([&](const HttpRequest&) {
+        delivered = true;
+        return Status(204);
+    }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    dispatcher.reset(); // Join synchronizes the captured flag and transport destruction.
+    EXPECT_TRUE(delivered);
+}
+
+TEST_F(DispatcherTest, DestructorJoinsAnIdleWorker)
+{
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(204)));
+    auto state = Event();
+    dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    dispatcher.reset();
+}
+
+TEST_F(DispatcherTest, DestructorWaitsForInflightTransportBeforeDestroyingIt)
+{
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate](const HttpRequest&) { return gate->Send(); }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    auto destroy = std::async(std::launch::async, [&] { dispatcher.reset(); });
+    ReleaseSend releaseAgain{gate};
+    EXPECT_EQ(std::future_status::timeout, destroy.wait_for(std::chrono::milliseconds(0)));
+    gate->Open();
+    destroy.get();
+}
+
+TEST_F(DispatcherTest, EmptyShutdownIsIdempotentAndDoesNotLaunchWorker)
+{
+    EXPECT_CALL(*transport, Send(_)).Times(0);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->Shutdown());
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->Shutdown(PiwikShutdownMode::DiscardPending));
+    auto state = Event();
+    EXPECT_EQ(0, dispatcher->Submit(state));
+    EXPECT_FALSE(dispatcher->Flush());
+}
+
+TEST_F(DispatcherTest, ShutdownDrainWaitsForInflightAndThenSendsQueuedWork)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_))
+        .WillOnce(Invoke([gate](const HttpRequest& request) {
+            EXPECT_FALSE(request.cancellation->load());
+            return gate->Send();
+        })).WillOnce(Return(Status(204)));
+    auto state = Event();
+    dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    const int queued = dispatcher->Submit(state);
+    auto stop = std::async(std::launch::async, [&] { return dispatcher->Shutdown(); });
+    // Guard declared after future: release the fake send on an early assertion.
+    ReleaseSend releaseAgain{gate};
+    EXPECT_EQ(std::future_status::timeout, stop.wait_for(std::chrono::milliseconds(0)));
+    gate->Open();
+    EXPECT_EQ(PiwikFlushResult::Success, stop.get());
+    EXPECT_EQ(1, dispatcher->RequestStatus(queued));
+}
+
+TEST_F(DispatcherTest, ShutdownDiscardJoinsInflightBeforeReturningAndNotifiesFlushWaiters)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    auto gate = std::make_shared<SendGate>();
+    auto token = std::make_shared<std::shared_ptr<std::atomic<bool>>>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate, token](const HttpRequest& request) {
+        *token = request.cancellation;
+        auto response = gate->Send();
+        if ((*token)->load()) response.errorCode = ERROR_OPERATION_ABORTED;
+        return response;
+    }));
+    auto state = Event();
+    const int active = dispatcher->Submit(state);
+    ASSERT_TRUE(dispatcher->Flush());
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    const int queued = dispatcher->Submit(state);
+    auto flush = std::async(std::launch::async, [&] { return dispatcher->FlushAndWait(std::chrono::seconds(3)); });
+    auto stop = std::async(std::launch::async, [&] { return dispatcher->Shutdown(PiwikShutdownMode::DiscardPending); });
+    ReleaseSend releaseAgain{gate};
+    ExpectStatus(queued, -1); // Shutdown has discarded the queue and set cancellation.
+    EXPECT_TRUE((*token)->load());
+    EXPECT_EQ(std::future_status::timeout, stop.wait_for(std::chrono::milliseconds(0)));
+    EXPECT_EQ(0, dispatcher->RequestStatus(active));
+    gate->Open();
+    EXPECT_EQ(PiwikFlushResult::Failed, stop.get());
+    EXPECT_EQ(PiwikFlushResult::Failed, flush.get());
+    EXPECT_EQ(-1, dispatcher->RequestStatus(active));
+}
+
+TEST_F(DispatcherTest, ConnectionTimeoutUsesFiniteValidatedSecondsForEachSend)
+{
+    dispatcher->SetConnectionTimeout(2);
+    dispatcher->SetConnectionTimeout(0);
+    dispatcher->SetConnectionTimeout(-1);
+    dispatcher->SetConnectionTimeout((std::numeric_limits<int>::max)());
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([](const HttpRequest& request) {
+        EXPECT_EQ(2000, request.timeoutMilliseconds);
+        EXPECT_TRUE(request.cancellation);
+        EXPECT_FALSE(request.cancellation->load());
+        return Status(204);
+    }));
+    auto state = Event();
+    dispatcher->Submit(state);
+    EXPECT_EQ(PiwikFlushResult::Success, dispatcher->Shutdown());
+}
+
+TEST(WinHttpShutdown, AlreadyCancelledRequestDoesNotStartNetworkIo)
+{
+    piwik::detail::WinHttpTransport transport;
+    HttpRequest request;
+    request.cancellation = std::make_shared<std::atomic<bool>>(true);
+    EXPECT_EQ(ERROR_OPERATION_ABORTED, transport.Send(request).errorCode);
+}
+
+TEST(WinHttpShutdown, InfiniteAndNegativePhaseTimeoutsAreRejectedBeforeNetworkIo)
+{
+    piwik::detail::WinHttpTransport transport;
+    HttpRequest request;
+    for (int timeout : {0, -1})
+    {
+        request.timeoutMilliseconds = timeout;
+        EXPECT_EQ(ERROR_INVALID_PARAMETER, transport.Send(request).errorCode);
+    }
+}
+
 struct StatusCase { unsigned int code; int expected; };
 class DeliveryStatusTest : public DispatcherTest,
     public ::testing::WithParamInterface<StatusCase> {};

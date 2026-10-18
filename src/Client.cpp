@@ -498,6 +498,15 @@ PiwikFlushResult PiwikClient::FlushAndWait (std::chrono::milliseconds timeout)
 	return Dispatcher.FlushAndWait(timeout);
 }
 
+PiwikFlushResult PiwikClient::Shutdown (PiwikShutdownMode mode)
+{
+	{
+		PiwikScopedLock lock(Mutex);
+		Disabled = true;
+	}
+	return Dispatcher.Shutdown(mode);
+}
+
 // RequestStatus will return a code describing the outcome of a previous request as follows:
 // - positive if the request was successfully acknowledged by the server
 // - negative if the request failed

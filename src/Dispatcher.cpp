@@ -18,6 +18,8 @@
 #include "HttpTransport.h"
 #include <utility>
 #include <mutex>
+#include <limits>
+#include <system_error>
 
 namespace {
 // Adapt the existing recursive Windows mutex for condition_variable_any.
@@ -45,14 +47,14 @@ PiwikDispatcher::PiwikDispatcher (std::unique_ptr<piwik::detail::IHttpTransport>
 	Method = PIWIK_BASIC_METHOD; 
 	ConnectionTimeout = PIWIK_CONNECTION_TIMEOUT; 
 	DispatchInterval = PIWIK_DISPATCH_INTERVAL; 
-	Secure = DryRun = Synchronous = Running = false; 
+	Secure = DryRun = Synchronous = false;
 	SerialNumber = LastAcknowledged = LastCompleted = 0;
 	Service = Wake = 0;
 }
 
 PiwikDispatcher::~PiwikDispatcher ()
 {
-	ShutdownService ();
+	Shutdown(PiwikShutdownMode::Drain);
 }
 
 TSTRING PiwikDispatcher::CurrentApiUrl ()  
@@ -122,7 +124,10 @@ void PiwikDispatcher::SetVerifyServerCertificate (bool verify)
 
 void PiwikDispatcher::SetConnectionTimeout (int t)
 {
-	ConnectionTimeout = t;
+	if (t > 0 && t <= (std::numeric_limits<int>::max)() / 1000)
+		ConnectionTimeout = t;
+	else
+		Logger.Error(L"HTTP phase timeout must be positive seconds without millisecond overflow");
 }
 
 void PiwikDispatcher::SetDispatchInterval (int t)
@@ -160,6 +165,7 @@ int PiwikDispatcher::Submit (PiwikState& st)
 	}
 	PiwikScopedLock lck (Mutex);
 	Request itm;
+	if (!Accepting) return 0;
 
 	itm.Serial = ++SerialNumber;
 	itm.Host   = ApiHost;
@@ -239,33 +245,50 @@ bool PiwikDispatcher::LaunchService ()
 {
 	Logger.Info (L"Starting Piwik dispatch service");
 
-	Running = true;
 	if ((Wake = ::CreateEvent (0, FALSE, FALSE, 0)))
 		if ((Service = (HANDLE) _beginthreadex (0, 0, ServiceRoutine, this, 0, 0)))
 			return true;
 
 	Logger.Error (L"Could not launch Piwik dispatch service");
-	Running = false;
 	if (Wake) ::CloseHandle(Wake), Wake = 0;
 	return false;
 }
 
 // This function will stop the dispatching thread and delete all associated resources
 
-void PiwikDispatcher::ShutdownService ()
+PiwikFlushResult PiwikDispatcher::Shutdown (PiwikShutdownMode mode)
 {
-	//the following code causing a crash TBD
-	//Logger.Info (L"Terminating Piwik dispatch service");
-
-	Running = false;
-	Flush ();
-	Sleep (250); // seems to be required if service has been recently launched
-	if (Service && ::WaitForSingleObject (Service, PIWIK_SHUTDOWN_WAIT * 1000) != WAIT_OBJECT_0)
-		::TerminateThread (Service, -1);
-	if (Service)
-		CloseHandle (Service), Service = 0;
-	if (Wake)
-		CloseHandle (Wake), Wake = 0;
+	// Serialize join/handle cleanup. Never hold the queue mutex while joining.
+	std::lock_guard<std::mutex> shutdownLock(ShutdownMutex);
+	HANDLE worker;
+	{
+		PiwikScopedLock lock(Mutex);
+		Accepting = false;
+		Stopping = true;
+		if (mode == PiwikShutdownMode::DiscardPending)
+		{
+			Cancellation->store(true);
+			for (const auto& request : Requests) Failures.push_back(request.Serial);
+			Requests.clear();
+		}
+		if (!Service && !Requests.empty() && !LaunchService())
+		{
+			for (const auto& request : Requests) Failures.push_back(request.Serial);
+			Requests.clear();
+		}
+		worker = Service;
+		if (worker) ::SetEvent(Wake);
+		else LastCompleted = SerialNumber;
+	}
+	CompletionChanged.notify_all();
+	if (worker && ::WaitForSingleObject(worker, INFINITE) != WAIT_OBJECT_0)
+		throw std::system_error(static_cast<int>(::GetLastError()), std::system_category(), "Could not join dispatch worker");
+	{
+		PiwikScopedLock lock(Mutex);
+		if (Service) ::CloseHandle(Service), Service = 0;
+		if (Wake) ::CloseHandle(Wake), Wake = 0;
+		return Failures.empty() ? PiwikFlushResult::Success : PiwikFlushResult::Failed;
+	}
 }
 
 // Main dispatching routine run in the service thread
@@ -274,7 +297,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 {
 	PiwikDispatcher* dsp = (PiwikDispatcher*) arg;
 
-	while (dsp && dsp->Running)
+	while (dsp)
 	{
 		::WaitForSingleObject (dsp->Wake, (dsp->DispatchInterval > 0 ? dsp->DispatchInterval * 1000 - 500 : INFINITE));
 		while (true)
@@ -284,7 +307,14 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			dsp->Mutex.Activate ();
 			if (dsp->Requests.empty ())
 			{
+				const bool stopped = dsp->Stopping;
+				if (stopped) dsp->LastCompleted = dsp->SerialNumber;
 				dsp->Mutex.Release ();
+				if (stopped)
+				{
+					dsp->CompletionChanged.notify_all();
+					return 0;
+				}
 				break;
 			}
 			batch.push_back(dsp->Requests.front());
@@ -329,6 +359,7 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 
 bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry)
 {
+    if (Cancellation->load()) return false;
     if (DryRun)
     {
         Logger.Log (L"DRYRUN - Not sending request: ", qry.c_str ());
@@ -340,6 +371,8 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
     request.path = path;
     request.secure = Secure;
     request.verifyServerCertificate = VerifyServerCertificate.load();
+    request.timeoutMilliseconds = ConnectionTimeout.load() * 1000;
+    request.cancellation = Cancellation;
     request.headers = L"Content-Type:application/json;charset=UTF-8\r\n";
     if (mth == PIWIK_METHOD_GET)
     {
