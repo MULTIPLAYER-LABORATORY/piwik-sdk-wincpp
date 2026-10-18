@@ -87,12 +87,21 @@ public sealed class PiwikLocalTlsServer : IDisposable
                         using (var reader = new StreamReader(tls, Encoding.ASCII, false, 1024, true))
                         {
                             string line;
+                            bool stall = false;
                             int count = 0;
                             do
                             {
                                 line = reader.ReadLine();
+                                if (count == 0 && line != null && line.StartsWith("GET /stall ")) stall = true;
                                 if (++count > 100) throw new IOException("Too many headers");
                             } while (!String.IsNullOrEmpty(line));
+                            if (stall)
+                            {
+                                // WinHTTP timers are not precise wall-clock deadlines.
+                                // Allow timer granularity while keeping fixture shutdown prompt.
+                                var deadline = DateTime.UtcNow.AddSeconds(8);
+                                while (!stopping && DateTime.UtcNow < deadline) Thread.Sleep(25);
+                            }
                         }
                         var reply = Encoding.ASCII.GetBytes(
                             "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n");

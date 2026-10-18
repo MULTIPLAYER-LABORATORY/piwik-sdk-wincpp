@@ -21,6 +21,19 @@ HttpResponse Failure(const wchar_t* message)
     response.errorMessage = message;
     return response;
 }
+
+bool Cancelled(const HttpRequest& request)
+{
+    return request.cancellation && request.cancellation->load();
+}
+
+HttpResponse CancellationFailure()
+{
+    HttpResponse response;
+    response.errorCode = ERROR_OPERATION_ABORTED;
+    response.errorMessage = L"HTTP request cancelled during shutdown";
+    return response;
+}
 }
 
 WinHttpTransport::~WinHttpTransport()
@@ -39,6 +52,13 @@ DWORD CertificateSecurityFlags(const HttpRequest& request)
 
 HttpResponse WinHttpTransport::Send(const HttpRequest& request)
 {
+    if (Cancelled(request)) return CancellationFailure();
+    if (request.timeoutMilliseconds <= 0) {
+        HttpResponse response;
+        response.errorCode = ERROR_INVALID_PARAMETER;
+        response.errorMessage = L"HTTP phase timeout must be positive";
+        return response;
+    }
     // Do not reuse connections from a session with a different verification
     // policy when an application changes this setting between sends.
     if (session_ && sessionVerifiesServerCertificate_ != request.verifyServerCertificate) {
@@ -52,15 +72,27 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
         sessionVerifiesServerCertificate_ = request.verifyServerCertificate;
     }
 
+    const int timeout = request.timeoutMilliseconds;
+    if (!::WinHttpSetTimeouts(session_, timeout, timeout, timeout, timeout))
+        return Failure(L"Could not configure HTTP phase timeouts");
+    if (Cancelled(request)) return CancellationFailure();
     ScopedInternetHandle connection(::WinHttpConnect(session_, request.host.c_str(),
         request.port, 0));
     if (!connection.value) return Failure(L"Could not open HTTP connection");
+    if (Cancelled(request)) return CancellationFailure();
 
     ScopedInternetHandle httpRequest(::WinHttpOpenRequest(connection.value,
         request.method.c_str(), request.path.c_str(), nullptr, WINHTTP_NO_REFERER,
         WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_ESCAPE_DISABLE_QUERY |
         WINHTTP_FLAG_REFRESH | (request.secure ? WINHTTP_FLAG_SECURE : 0)));
     if (!httpRequest.value) return Failure(L"Could not create HTTP request");
+    if (!::WinHttpSetTimeouts(httpRequest.value, timeout, timeout, timeout, timeout))
+        return Failure(L"Could not configure HTTP request phase timeouts");
+    // Header completion has its own WinHTTP timeout (otherwise 90 seconds).
+    DWORD headerTimeout = static_cast<DWORD>(timeout);
+    if (!::WinHttpSetOption(httpRequest.value, WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT,
+        &headerTimeout, sizeof headerTimeout))
+        return Failure(L"Could not configure HTTP response-header timeout");
 
     DWORD options = CertificateSecurityFlags(request);
     if (options && !::WinHttpSetOption(httpRequest.value, WINHTTP_OPTION_SECURITY_FLAGS,
@@ -68,16 +100,19 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
         return Failure(L"Could not configure server certificate validation");
 
     const DWORD size = static_cast<DWORD>(request.body.size());
+    if (Cancelled(request)) return CancellationFailure();
     void* body = request.body.empty() ? WINHTTP_NO_REQUEST_DATA :
         const_cast<char*>(request.body.data());
     if (!::WinHttpSendRequest(httpRequest.value, request.headers.c_str(),
         static_cast<DWORD>(-1), body, size, size, 0))
         return Failure(L"Could not send HTTP request");
 
+    if (Cancelled(request)) return CancellationFailure();
     if (!::WinHttpReceiveResponse(httpRequest.value, nullptr))
         return Failure(L"Could not receive HTTP response");
 
     HttpResponse response;
+    if (Cancelled(request)) return CancellationFailure();
     DWORD statusCode = 0;
     DWORD statusSize = sizeof statusCode;
     if (!::WinHttpQueryHeaders(httpRequest.value,
@@ -93,6 +128,7 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
     if (statusCode / 100 == 2) {
         DWORD available = 0, read = 0;
         if (::WinHttpQueryDataAvailable(httpRequest.value, &available) && available) {
+            if (Cancelled(request)) return CancellationFailure();
             response.body.resize(available);
             if (::WinHttpReadData(httpRequest.value, &response.body[0], available, &read))
                 response.body.resize(read);
@@ -101,6 +137,7 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
         }
     }
 #endif
+    if (Cancelled(request)) return CancellationFailure();
     return response;
 }
 

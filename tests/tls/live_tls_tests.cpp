@@ -55,4 +55,13 @@ TEST_F(LiveTlsTest, RestoringValidationRejectsPreviouslyAcceptedServer)
     EXPECT_EQ(ERROR_WINHTTP_SECURE_FAILURE, strict.errorCode);
     EXPECT_EQ(0u, strict.statusCode);
 }
+TEST_F(LiveTlsTest, StalledResponseHonorsFiniteHttpPhaseTimeout)
+{
+    request.verifyServerCertificate = false;
+    request.path = L"/stall";
+    request.timeoutMilliseconds = 1000;
+    const auto response = transport.Send(request);
+    EXPECT_EQ(ERROR_WINHTTP_TIMEOUT, response.errorCode) << response.errorMessage;
+    EXPECT_EQ(0u, response.statusCode);
+}
 } // namespace

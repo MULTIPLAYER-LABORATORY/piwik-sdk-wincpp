@@ -124,7 +124,11 @@ These are the entry points provided by the Piwik tracking library:
 		
 	``void SetConnectionTimeout (int t)``
 	
-	Allows to set the timeout in seconds when trying to open a connection to the Piwik server.
+	Sets positive finite seconds for each WinHTTP resolve/connect/send/receive phase
+	(default five seconds). Invalid or millisecond-overflowing values are ignored
+	and logged. Applies to subsequent sends, not an already-running operation; this
+	is not a total-request or shutdown deadline. Header completion is limited too;
+	WinHTTP's coarse timers can report expiration later than the configured value.
 	
 	``void SetDispatchInterval (int t)``
 	
@@ -358,12 +362,30 @@ These are the entry points provided by the Piwik tracking library:
 
 	Zero/negative timeouts signal dispatch and poll completion without waiting.
 	Already-queued work can be drained after ``SetDisabled(true)``. A timeout does
-	not cancel or retry sends; subsequent calls can observe completion. The legacy
-	destructor/shutdown policy is unchanged, so this is not a bound on total exit
-	time. Do not destroy the client concurrently with active calls. Rebuild headers
+	not cancel or retry sends; subsequent calls can observe completion. The
+	cooperative shutdown below still joins the worker, so this is not a bound on
+	total exit time. Do not destroy the client concurrently with active calls. Rebuild headers
 	and library together. Use ``RequestStatus`` for individual request outcomes;
 	HTTP success does not prove Matomo ingestion of every bulk entry.
 	
+	``PiwikFlushResult Shutdown(PiwikShutdownMode mode = PiwikShutdownMode::Drain)``
+
+	Permanently rejects further submissions and joins the worker before closing its
+	resources. ``Drain`` sends queued work; ``DiscardPending`` marks queued requests
+	failed and requests in-flight cancellation between synchronous HTTP phases.
+	Both modes wait for worker completion, returning cumulative ``Success`` or
+	``Failed`` (never ``TimedOut``). The destructor defaults to ``Drain``; forced
+	thread termination and the old startup sleep are removed.
+
+	Repeated calls are safe; concurrent shutdown calls serialize. A later discard
+	call does not interrupt an earlier drain's join. Enabling tracking again does
+	not reopen a stopped client. Status methods remain available. An in-flight
+	phase must finish or time out; there is no hard overall exit deadline and no
+	ability to retract server-accepted data. Internal transports must eventually
+	return. Do not destroy the object concurrently with calls or invoke shutdown
+	from its worker callbacks. A join OS error throws ``std::system_error`` without
+	freeing worker resources. Rebuild headers/library together.
+
 	``int  RequestStatus (int rqst, int wait = 0);``
 	
 	Allows to query the outcome of a tracking request based on the identifier provided by the tracking call. A positive integer indicates success while a negative one indicates failure. Zero will be returned while the status is still unknown, and a timeout in seconds can be provided to instruct the function to wait for a defined state if necessary.

@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <winhttp.h>
 #include <string>
+#include <atomic>
+#include <memory>
 
 // Internal dependency boundary. Not part of the installed application API.
 namespace piwik { namespace detail {
@@ -17,6 +19,8 @@ struct HttpRequest
     std::string body;
     bool secure = false;
     bool verifyServerCertificate = true;
+    int timeoutMilliseconds = 5000; // Positive finite timeout for each HTTP phase.
+    std::shared_ptr<std::atomic<bool>> cancellation; // Checked between synchronous operations.
 };
 
 // Zero keeps WinHTTP's certificate checks enabled. An explicit HTTPS opt-out
@@ -35,7 +39,9 @@ class IHttpTransport
 {
 public:
     virtual ~IHttpTransport() = default;
-    // Called serially by the dispatcher worker. Implementations must not throw.
+    // Called serially by the dispatcher worker. Implementations must not throw,
+    // must eventually return, and should respect phase timeouts/cancellation.
+    // Do not call Shutdown or destroy the dispatcher from its worker callbacks.
     virtual HttpResponse Send(const HttpRequest& request) = 0;
 };
 
