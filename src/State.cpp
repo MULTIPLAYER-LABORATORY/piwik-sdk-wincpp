@@ -101,15 +101,7 @@ string PiwikState::Serialize (PiwikQueryFormat frmt)
 	if (ScreenVariables.IsValid ())
 		qb.AddParameter (PARAM_SCREEN_SCOPE_CUSTOM_VARIABLES, ScreenVariables);
 
-    if (DimensionVariables.IsValid ())
-    {
-        qb.AddDimension(DimensionVariables);
-    }
-
-    if (VistDimensionVariables.IsValid ())
-    {
-        qb.AddDimension(VistDimensionVariables);
-    }
+    qb.AddDimensions(VistDimensionVariables, DimensionVariables, ActionDimensions);
 
 	return qb.Result ();
 }

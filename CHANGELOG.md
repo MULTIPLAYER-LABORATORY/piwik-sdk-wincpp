@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Per-event custom dimensions
+
+- Add owned `PiwikActionDimensions` with numeric IDs 1..999, replacement, removal,
+  clearing, and read-only inspection. Attach it through `PiwikState::ActionDimensions`
+  for application-defined outcome/error context without shared visit-state mutation.
+- Snapshot dimensions when queuing, retain full strings without legacy slot/length
+  truncation, and support explicit empty values. Server configuration/limits apply.
+- Fix legacy dimension serialization: remove literal wrapper quotes and URL-encode
+  dimension names/values in both GET and bulk requests. Corrected values may appear
+  separately from historical quoted report values.
+- Emit identical wire keys once, preferring typed action values over legacy action
+  values over visit defaults. Last occurrence wins within each legacy array.
+- Add collection, encoding, Unicode, precedence, per-event isolation, queue snapshot,
+  legacy client, and installed-package regression coverage. Rebuild headers and the
+  static library together because the tracking-state layout changed.
+
 ### Numeric measurement correctness and legacy timing
 
 - Serialize numbers using the classic locale with round-trip floating precision;

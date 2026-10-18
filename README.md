@@ -82,7 +82,7 @@ Network tests use the internal `piwik::detail::IHttpTransport` interface and an 
 
 The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification, no-retry behavior, and the existing shutdown policy are retained. Certificate validation now defaults to enabled, with an explicit per-client opt-out described below. The worker running flag is atomic, and queue/status accesses involved in completion are synchronized. Retry logic, bulk-body validation, and broader shutdown/configuration thread-safety changes remain separate increments.
 
-Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Action-dimension wire formatting remains a separate compatibility concern.
+Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Custom dimension values use URL encoding in both GET and bulk requests.
 
 GitHub Actions builds and tests x86/x64 Debug/Release using the VS2019 v142 toolset. CMake presets replace the old checked-in Visual Studio 2010 project files as the maintained build entry point. The historical Windows GUI sample source remains for reference.
 
@@ -158,6 +158,56 @@ NaN and positive/negative infinity are invalid for event values and revenue.
 numbers. `PiwikState::Serialize` throws `std::invalid_argument` for such states;
 `HasFiniteNumbers()` permits a preflight check. Negative finite event values remain
 supported. These rules do not change the application's global locale.
+
+### Per-event dimensions for outcomes and error codes
+
+Use `PiwikState::ActionDimensions` to attach application-defined context to one
+event. Configure each ID with **Action** scope on your Matomo site first; IDs
+and error vocabularies belong to the application. The SDK cannot verify the
+server's dimension configuration. See the [Matomo Tracking API](https://developer.matomo.org/api-reference/tracking-api).
+
+```cpp
+PiwikState measurement;
+measurement.TrackedPath = _T("/startup");
+measurement.EventCategory = _T("Performance");
+measurement.EventAction = _T("Startup");
+measurement.EventName = _T("ui_ready_ms");
+measurement.SetEventValue(1250.5);
+// Example IDs only: replace with your site's configured Action dimensions.
+measurement.ActionDimensions.Set(1, _T("failure"));
+measurement.ActionDimensions.Set(2, _T("Win32"));
+measurement.ActionDimensions.Set(3, _T("5"));
+const int requestId = tracker.Track(measurement);
+```
+
+`PiwikActionDimensions::Set(int id, const TSTRING& value)` returns false for IDs
+outside 1..999, leaving the collection unchanged. Setting the same ID replaces
+its value. Values are owned strings, without the legacy fixed-slot limit or
+client-side length truncation; the server's configured limits still apply.
+`Values()` provides read-only access. `Remove(id)` omits that ID from subsequent
+requests and returns whether it existed; `Clear()` omits all IDs in this collection.
+An empty string is an explicit `dimensionN=` value, not removal. Neither removal
+nor an empty value promises to clear data already stored on the server.
+
+Each state owns its dimensions. `Track` serializes a snapshot before returning;
+later changes to that state do not change queued requests or visit settings.
+Use a new state for each operation, or replace/clear error fields before reuse.
+For success, an application's schema can explicitly send `none` for error source
+and code. Keep codes as strings, for example `0x80070005` or `5`, so their namespace
+and representation are preserved; do not put codes into the numeric duration.
+
+Dimensions from all sources are emitted once per identical wire key. Typed
+`ActionDimensions` take precedence over the legacy per-action `DimensionVariables`
+array, which takes precedence over visit defaults. Duplicate legacy keys use the
+last value in their array. Scope is determined by Matomo configuration; assigning
+the same ID to both visit and action context is not recommended.
+
+This update also corrects the legacy dimension serializers: values no longer get
+extra wrapper quotes, and both GET and bulk query strings URL-encode dimension
+names/values, including `&`, `+`, quotes, and UTF-8 text. Reports may therefore
+show corrected values separately from old values that contained literal quotes.
+Existing variadic method signatures remain available. Rebuild headers and the
+static library together after the state layout change.
 
 ### Legacy generation-time field (`gt_ms`)
 

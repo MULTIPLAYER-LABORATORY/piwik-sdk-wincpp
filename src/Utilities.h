@@ -20,6 +20,7 @@
 #include <string>
 #include <sstream>
 #include <ostream>
+#include <map>
 
 using namespace std;
 
@@ -91,6 +92,25 @@ struct PiwikDimensionsSet
 
 	int  GetIndex (LPCTSTR nam);
 	bool IsValid ();
+};
+
+// Owned, per-request dimensions. IDs must be configured with Action scope on
+// the Matomo site. Empty values are explicit; Remove omits a dimension.
+class PiwikActionDimensions
+{
+public:
+    bool Set (int id, const TSTRING& value)
+    {
+        if (id < 1 || id > 999) return false;
+        Items[id] = value;
+        return true;
+    }
+    bool Remove (int id) { return Items.erase(id) != 0; }
+    void Clear () { Items.clear(); }
+    const std::map<int, TSTRING>& Values () const { return Items; }
+
+private:
+    std::map<int, TSTRING> Items;
 };
 
 struct PiwikVisitDimensionsSet

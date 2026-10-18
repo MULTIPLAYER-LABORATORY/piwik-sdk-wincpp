@@ -59,6 +59,7 @@ struct PiwikState : public PiwikBasicState
 	TSTRING ContentInteraction;
 	PiwikVariableSet ScreenVariables;
     PiwikDimensionsSet DimensionVariables;
+    PiwikActionDimensions ActionDimensions;
 	int NewSession;
 	int VisitCount;
 	time_t FirstVisit;
