@@ -51,6 +51,8 @@ public:
 	void SetRequestMethod (PiwikMethod m);
 	bool UsesSecureConnection ();
 	void SetSecureConnection (bool f);
+	bool VerifiesServerCertificate ();
+	void SetVerifyServerCertificate (bool verify);
 	TSTRING CurrentUserAgent ();
 	void SetUserAgent (LPCTSTR p);
 	TSTRING CurrentLanguage ();

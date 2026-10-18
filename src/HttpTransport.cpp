@@ -28,16 +28,32 @@ WinHttpTransport::~WinHttpTransport()
     if (session_) ::WinHttpCloseHandle(session_);
 }
 
+DWORD CertificateSecurityFlags(const HttpRequest& request)
+{
+    if (!request.secure || request.verifyServerCertificate)
+        return 0;
+    return SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
+        SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+        SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+}
+
 HttpResponse WinHttpTransport::Send(const HttpRequest& request)
 {
+    // Do not reuse connections from a session with a different verification
+    // policy when an application changes this setting between sends.
+    if (session_ && sessionVerifiesServerCertificate_ != request.verifyServerCertificate) {
+        ::WinHttpCloseHandle(session_);
+        session_ = nullptr;
+    }
     if (!session_) {
         session_ = ::WinHttpOpen(L"Piwik Desktop Client", WINHTTP_ACCESS_TYPE_NO_PROXY,
             WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!session_) return Failure(L"Could not open HTTP session");
+        sessionVerifiesServerCertificate_ = request.verifyServerCertificate;
     }
 
     ScopedInternetHandle connection(::WinHttpConnect(session_, request.host.c_str(),
-        INTERNET_DEFAULT_PORT, 0));
+        request.port, 0));
     if (!connection.value) return Failure(L"Could not open HTTP connection");
 
     ScopedInternetHandle httpRequest(::WinHttpOpenRequest(connection.value,
@@ -46,13 +62,10 @@ HttpResponse WinHttpTransport::Send(const HttpRequest& request)
         WINHTTP_FLAG_REFRESH | (request.secure ? WINHTTP_FLAG_SECURE : 0)));
     if (!httpRequest.value) return Failure(L"Could not create HTTP request");
 
-    // Preserve the legacy policy in this extraction. Configurable certificate
-    // validation is a separate change with its own migration and tests.
-    DWORD options = SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
-        SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_UNKNOWN_CA |
-        SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
-    ::WinHttpSetOption(httpRequest.value, WINHTTP_OPTION_SECURITY_FLAGS,
-        &options, sizeof options);
+    DWORD options = CertificateSecurityFlags(request);
+    if (options && !::WinHttpSetOption(httpRequest.value, WINHTTP_OPTION_SECURITY_FLAGS,
+        &options, sizeof options))
+        return Failure(L"Could not configure server certificate validation");
 
     const DWORD size = static_cast<DWORD>(request.body.size());
     void* body = request.body.empty() ? WINHTTP_NO_REQUEST_DATA :

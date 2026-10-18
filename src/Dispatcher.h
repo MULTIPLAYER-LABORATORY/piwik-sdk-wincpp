@@ -47,6 +47,7 @@ private:
 	int ConnectionTimeout;
 	int DispatchInterval;
 	bool Secure;
+	std::atomic<bool> VerifyServerCertificate{true};
 	bool DryRun;
 	bool Synchronous;
 	std::atomic<bool> Running;
@@ -73,6 +74,8 @@ public:
 	void SetRequestMethod (PiwikMethod m);
 	bool UsesSecureConnection ();
 	void SetSecureConnection (bool f);
+	bool VerifiesServerCertificate ();
+	void SetVerifyServerCertificate (bool verify);
 	void SetConnectionTimeout (int t);
 	void SetDispatchInterval (int t);
 	bool IsDryRun ();
