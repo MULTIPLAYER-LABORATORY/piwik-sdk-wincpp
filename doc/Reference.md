@@ -198,6 +198,23 @@ These are the entry points provided by the Piwik tracking library:
 		
 	Local variables should keep always the same position within this set in order to be correctly tracked. When sending these values to the server they will be assigned to the slot corresponding to the positional parameter being used. Any unneeded slots can be filled with NULL.
 
+	``int TrackDuration(LPCTSTR path, LPCTSTR operation, LPCTSTR metric,
+    std::chrono::duration<double, std::milli> elapsed,
+    const PiwikActionDimensions& dimensions = {})``
+
+	Queues an event with category ``Performance``, action ``operation``, name
+	``metric``, explicit numeric milliseconds, and ``ca=1``. Standard chrono
+	durations and ``steady_clock`` differences convert automatically; zero and
+	fractions are retained. Use stable metric names with ``_ms`` units (no suffix
+	is appended). Optional action dimensions are copied into this event.
+
+	Returns the existing request identifier, or zero for negative/non-finite
+	elapsed time, null/empty/ASCII-whitespace-only labels, or the normal disabled/
+	unconfigured tracking checks. No request is queued for rejected input. Use
+	``RequestStatus`` for the existing HTTP outcome. Capture elapsed time before
+	calling: the API does not time an operation itself. Existing dispatch settings,
+	including synchronous mode, still apply. No ``gt_ms`` or ``pf_*`` is emitted.
+
 	``int TrackAction(LPCTSTR path, LPCTSTR act, int amountOfTime, int nDimensionNum, ...)``
 
 	Tracks an action with dimension name/value pairs. ``amountOfTime`` has the same
@@ -261,6 +278,7 @@ These are the entry points provided by the Piwik tracking library:
 		TSTRING EventName;
 		double EventValue;
 		bool HasEventValue;
+		bool CustomAction; // Default false; true emits ca=1, used by TrackDuration.
 		int Goal;
 		float Revenue;
 		TSTRING OutLink;

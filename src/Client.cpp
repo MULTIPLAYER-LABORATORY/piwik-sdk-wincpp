@@ -16,6 +16,7 @@
 #include "State.h"
 #include "Dispatcher.h"
 #include "Client.h"
+#include <cmath>
 
 // Configuration
 
@@ -259,6 +260,31 @@ int PiwikClient::TrackEvent (LPCTSTR path, LPCTSTR ctg, LPCTSTR act, LPCTSTR nam
 		st.EventValue = val;
 
 	return Track (st);
+}
+
+int PiwikClient::TrackDuration (LPCTSTR path, LPCTSTR operation, LPCTSTR metric,
+                               std::chrono::duration<double, std::milli> elapsed,
+                               const PiwikActionDimensions& dimensions)
+{
+	const auto hasText = [](LPCTSTR value) {
+		return value && TSTRING(value).find_first_not_of(_T(" \t\r\n\v\f")) != TSTRING::npos;
+	};
+	const double milliseconds = elapsed.count();
+	if (!hasText(path) || !hasText(operation) || !hasText(metric) ||
+	    !std::isfinite(milliseconds) || milliseconds < 0)
+	{
+		Logger.Error(L"Duration requires nonblank labels and finite nonnegative elapsed time; request not queued");
+		return 0;
+	}
+	PiwikState state;
+	state.TrackedPath = path;
+	state.EventCategory = _T("Performance");
+	state.EventAction = operation;
+	state.EventName = metric;
+	state.SetEventValue(milliseconds);
+	state.CustomAction = true;
+	state.ActionDimensions = dimensions;
+	return Track(state);
 }
 
 // TrackTrackScreen: path (PARAM_URL_PATH) is the only required parameter.

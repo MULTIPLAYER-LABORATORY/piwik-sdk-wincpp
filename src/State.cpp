@@ -72,6 +72,8 @@ string PiwikState::Serialize (PiwikQueryFormat frmt)
 		qb.AddParameter (PARAM_EVENT_NAME, EventName);
 	if (HasEventValue || EventValue)
 		qb.AddParameter (PARAM_EVENT_VALUE, EventValue);
+	if (CustomAction)
+		qb.AddParameter (PARAM_CUSTOM_ACTION, 1);
 	if (Goal)
 		qb.AddParameter (PARAM_GOAL_ID, Goal);
 	if (Revenue)

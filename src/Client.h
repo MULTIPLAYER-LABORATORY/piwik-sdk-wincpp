@@ -20,6 +20,7 @@
 #include <time.h>
 #include <string>
 #include <ostream>
+#include <chrono>
 
 using namespace std;
 
@@ -76,6 +77,10 @@ public:
     void SetVisitDimensions (int nDimensionNum, ...);
 
 	int  TrackEvent (LPCTSTR path, LPCTSTR ctg = 0, LPCTSTR act = 0, LPCTSTR nam = 0, float val = 0);
+	// Performance event, in fractional milliseconds; returns 0 for invalid input.
+	int  TrackDuration (LPCTSTR path, LPCTSTR operation, LPCTSTR metric,
+	                    std::chrono::duration<double, std::milli> elapsed,
+	                    const PiwikActionDimensions& dimensions = {});
 	// amountOfTime is legacy seconds -> gt_ms; Matomo 4+ does not record it.
 	int  TrackScreen (LPCTSTR path, LPCTSTR act = 0, int amountOfTime = 0, LPCTSTR nam1 = 0, LPCTSTR val1 = 0, LPCTSTR nam2 = 0, LPCTSTR val2 = 0, 
 		              LPCTSTR nam3 = 0, LPCTSTR val3 = 0, LPCTSTR nam4 = 0, LPCTSTR val4 = 0, LPCTSTR nam5 = 0, LPCTSTR val5 = 0,

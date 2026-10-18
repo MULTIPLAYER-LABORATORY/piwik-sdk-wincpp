@@ -50,6 +50,7 @@ struct PiwikState : public PiwikBasicState
 	TSTRING EventName;
 	double EventValue;
 	bool HasEventValue;
+	bool CustomAction;
 	int Goal;
 	float Revenue;
 	TSTRING OutLink;
@@ -70,7 +71,7 @@ struct PiwikState : public PiwikBasicState
     int AmountOfTime;
 
 	PiwikState (): NewSession(0), VisitCount(0), FirstVisit(0), LastVisit(0), 
-                   EventValue(0), HasEventValue(false), Goal(0), Revenue(0), Random(0), AmountOfTime(0)
+                   EventValue(0), HasEventValue(false), CustomAction(false), Goal(0), Revenue(0), Random(0), AmountOfTime(0)
     {
     }
 								

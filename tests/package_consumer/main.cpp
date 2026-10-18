@@ -23,6 +23,13 @@ int main()
     if (query != measurement.Serialize(PIWIK_FORMAT_URL)) return 10;
     if (query.find("&e_n=a%26b%3D%2B%25%22%5C%0A") == std::string::npos) return 11;
     if (query.find("&cvar=%7B%22") == std::string::npos) return 12;
+    // Exercise the installed chrono API without contacting any server.
+    client.SetDryRun(true);
+    client.SetDispatchInterval(3600);
+    PiwikActionDimensions context;
+    context.Set(1, _T("success"));
+    if (client.TrackDuration(_T("/startup"), _T("Startup"), _T("ready_ms"),
+        std::chrono::microseconds(1250), context) <= 0) return 13;
     return client.CurrentSiteId() == 7 && client.UsesSecureConnection() &&
         client.VerifiesServerCertificate() ? 0 : 3;
 }

@@ -126,6 +126,47 @@ For a private/self-signed deployment, trusting the issuing CA in Windows allows
 validation to remain enabled. Rebuild consumers with the updated headers and
 static library together when adopting this version.
 
+### Tracking application durations
+
+`TrackDuration` accepts a C++14 chrono duration and queues a Performance event
+with the elapsed value in fractional milliseconds. Measure with a monotonic
+clock and capture the end before calling the tracker:
+
+```cpp
+const auto start = std::chrono::steady_clock::now();
+// Perform application initialization here.
+const auto elapsed = std::chrono::steady_clock::now() - start;
+
+PiwikActionDimensions context;
+context.Set(1, _T("success")); // Replace with your configured Action dimension ID.
+const int requestId = tracker.TrackDuration(
+    _T("/startup"), _T("Startup"), _T("ui_ready_ms"), elapsed, context);
+```
+
+The mapping is `e_c=Performance`, `e_a=<operation>`, `e_n=<metric>`,
+`e_v=<milliseconds>`, `ca=1`. Give metrics stable names with `_ms` units;
+the method does not rename or append units to labels. Seconds, milliseconds,
+microseconds, and clock differences convert to `duration<double, std::milli>`.
+Zero is an explicit measurement; negative, NaN, infinite, or conversion-overflowed
+values return zero without queuing. Null, empty, or ASCII-whitespace-only path,
+operation, and metric labels also return zero.
+
+The optional dimensions are copied per event; pass your configured outcome,
+error source, and string error code there. No application-specific IDs or codes
+are reserved. The return value is the existing request identifier (zero means
+not queued), not proof of delivery; use `RequestStatus` for the existing
+HTTP-level outcome. Default dispatch is asynchronous; existing dispatch and
+synchronous-mode settings still apply. The method does not start a timer, wait
+for completion, alter `gt_ms`, or emit `pf_*` page metrics. Failed or cancelled
+operations can carry elapsed time plus their outcome dimensions.
+
+`PiwikState::CustomAction` is available to low-level callers and defaults to false.
+`TrackDuration` sets it true to emit `ca=1`; existing tracking methods retain
+their wire behavior. Matomo documents this flag for non-pageview actions in the
+[Tracking API](https://developer.matomo.org/api-reference/tracking-api).
+Rebuild headers and the static library together after the tracking-state layout
+change. Live Matomo ingestion remains untested until a test server is available.
+
 ### Request encoding
 
 Pass strings in their original form. The SDK URL-encodes query values for both

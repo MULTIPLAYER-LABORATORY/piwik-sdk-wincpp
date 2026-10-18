@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Chrono duration tracking
+
+- Add `TrackDuration(path, operation, metric, elapsed, dimensions = {})` using
+  C++14 `std::chrono::duration<double, std::milli>`. Emit Performance events with
+  explicit zero/fractional milliseconds, per-event dimensions, and `ca=1`.
+- Reject negative/non-finite durations and null/empty/blank labels before queuing;
+  retain existing dispatch configuration and request-ID semantics.
+- Add low-level `PiwikState::CustomAction`, default false, without changing legacy
+  tracking output. Rebuild headers and library together after the layout change.
+- Document steady-clock measurement, units, outcome/error context, and delivery
+  semantics; add API and installed-consumer regression coverage. No live Matomo
+  server is configured for ingestion tests.
+
 ### GET and bulk query encoding
 
 - URL-encode every string value in both GET and bulk requests, preserving query
