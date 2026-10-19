@@ -386,6 +386,30 @@ These are the entry points provided by the Piwik tracking library:
 	from its worker callbacks. A join OS error throws ``std::system_error`` without
 	freeing worker resources. Rebuild headers/library together.
 
+	``PiwikRequestResult RequestResult(int rqst)``
+
+	Returns a nonblocking, synchronized value snapshot. Fields: ``state``
+	(``PiwikDeliveryState``), ``httpStatus`` (unsigned int), ``errorCode`` (DWORD),
+	``message`` (std::wstring), and ``dryRun`` (bool). States are ``Unknown`` for
+	IDs not issued by this client (including zero/negative), ``Pending`` for queued
+	or in-flight work, ``Succeeded`` for HTTP 2xx without transport errors or a dry
+	run, ``Failed`` for transport/non-2xx failures, and ``Discarded`` for unsent
+	queued work removed by shutdown. In-flight cancellation is a transport failure.
+
+	Unavailable HTTP status is zero. No reported transport error is ERROR_SUCCESS;
+	HTTP failures can therefore have errorCode zero. Preserve both fields when
+	present. Messages are SDK/transport diagnostics rather than server bodies;
+	their wording is not a stable machine-readable contract. Pending/unknown fields
+	use zero/empty/false defaults. Dry-run success has dryRun true and HTTP status
+	zero. Non-dry success normally has an empty message.
+
+	Results are retained for the object's lifetime, including after shutdown; memory
+	grows with completed request count. Returned copies do not change when delivery
+	finishes. All IDs in a bulk send share its result; no ingestion/per-entry response
+	validation or retries are performed. Request IDs belong to the originating
+	client; an ID from another client cannot be recognized as foreign. Application
+	error events/dimensions remain separate from SDK delivery diagnostics.
+
 	``int  RequestStatus (int rqst, int wait = 0);``
 	
 	Allows to query the outcome of a tracking request based on the identifier provided by the tracking call. A positive integer indicates success while a negative one indicates failure. Zero will be returned while the status is still unknown, and a timeout in seconds can be provided to instruct the function to wait for a defined state if necessary.

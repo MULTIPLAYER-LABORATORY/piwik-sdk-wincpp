@@ -167,13 +167,14 @@ int PiwikDispatcher::Submit (PiwikState& st)
 	Request itm;
 	if (!Accepting) return 0;
 
-	itm.Serial = ++SerialNumber;
+	itm.Serial = SerialNumber + 1;
 	itm.Host   = ApiHost;
 	itm.Path   = ApiPath;
 	itm.Method = Method;
 	itm.Query  = st.Serialize ((Method == PIWIK_METHOD_GET ? PIWIK_FORMAT_URL : PIWIK_FORMAT_JSON));
 
 	Requests.push_back (itm);
+	SerialNumber = itm.Serial;
 
 	if (! Service)
 		LaunchService ();
@@ -237,6 +238,16 @@ int PiwikDispatcher::RequestStatus (int rqst)
 	return 0;
 }
 
+PiwikRequestResult PiwikDispatcher::RequestResult (int rqst)
+{
+	PiwikScopedLock lock(Mutex);
+	const auto found = Results.find(rqst);
+	if (found != Results.end()) return found->second;
+	PiwikRequestResult result;
+	if (rqst > 0 && rqst <= SerialNumber) result.state = PiwikDeliveryState::Pending;
+	return result;
+}
+
 // Internals
 
 // This function will launch the dispatching thread and create all its required resources
@@ -268,12 +279,24 @@ PiwikFlushResult PiwikDispatcher::Shutdown (PiwikShutdownMode mode)
 		if (mode == PiwikShutdownMode::DiscardPending)
 		{
 			Cancellation->store(true);
-			for (const auto& request : Requests) Failures.push_back(request.Serial);
+			for (const auto& request : Requests)
+			{
+				Failures.push_back(request.Serial);
+				auto& result = Results[request.Serial];
+				result.state = PiwikDeliveryState::Discarded;
+				result.message = L"Queued request discarded during shutdown";
+			}
 			Requests.clear();
 		}
 		if (!Service && !Requests.empty() && !LaunchService())
 		{
-			for (const auto& request : Requests) Failures.push_back(request.Serial);
+			for (const auto& request : Requests)
+			{
+				Failures.push_back(request.Serial);
+				auto& result = Results[request.Serial];
+				result.state = PiwikDeliveryState::Failed;
+				result.message = L"Could not launch dispatch worker during shutdown";
+			}
 			Requests.clear();
 		}
 		worker = Service;
@@ -332,20 +355,21 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 			}
 			dsp->Mutex.Release ();
 			auto& request = batch.front();
-			bool vld;
+			PiwikRequestResult result;
 			if (request.Method == PIWIK_METHOD_GET)
-				vld = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_GET, request.Query);
+				result = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_GET, request.Query);
 			else
 			{
 				string msg = "{\"requests\":[";
 				for (size_t i = 0; i < batch.size(); ++i)
 					msg += (i ? ",\"" : "\"") + batch[i].Query + "\"";
 				msg += "]}";
-				vld = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_POST, msg);
+				result = dsp->SendRequest(request.Host, request.Path, PIWIK_METHOD_POST, msg);
 			}
 			{
 				PiwikScopedLock lck (dsp->Mutex);
-				if (vld) dsp->LastAcknowledged = batch.back().Serial;
+				for (const auto& item : batch) dsp->Results[item.Serial] = result;
+				if (result.state == PiwikDeliveryState::Succeeded) dsp->LastAcknowledged = batch.back().Serial;
 				else for (const auto& item : batch) dsp->Failures.push_back(item.Serial);
 				dsp->LastCompleted = batch.back().Serial;
 			}
@@ -357,13 +381,23 @@ unsigned __stdcall PiwikDispatcher::ServiceRoutine (void* arg)
 	return 0;
 }
 
-bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry)
+PiwikRequestResult PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry)
 {
-    if (Cancellation->load()) return false;
+    PiwikRequestResult result;
+    result.state = PiwikDeliveryState::Failed;
+    if (Cancellation->load())
+    {
+        result.errorCode = ERROR_OPERATION_ABORTED;
+        result.message = L"HTTP request cancelled during shutdown";
+        return result;
+    }
     if (DryRun)
     {
         Logger.Log (L"DRYRUN - Not sending request: ", qry.c_str ());
-        return true;
+        result.state = PiwikDeliveryState::Succeeded;
+        result.dryRun = true;
+        result.message = L"Dry run; request was not sent";
+        return result;
     }
 
     piwik::detail::HttpRequest request;
@@ -386,21 +420,26 @@ bool PiwikDispatcher::SendRequest (wstring& host, wstring& path, PiwikMethod mth
     }
 
     const auto response = Transport->Send(request);
+    result.httpStatus = response.statusCode;
+    result.errorCode = response.errorCode;
     if (response.errorCode != ERROR_SUCCESS || !response.errorMessage.empty())
     {
         Logger.Error(response.errorMessage.empty() ? L"HTTP transport failed" :
             response.errorMessage.c_str(), 0, response.errorCode);
-        return false;
+        result.message = response.errorMessage.empty() ? L"HTTP transport failed" : response.errorMessage;
+        return result;
     }
     if (response.statusCode / 100 != 2)
     {
         Logger.Error(L"Unexpected HTTP response", 0, response.statusCode);
-        return false;
+        result.message = L"Unexpected HTTP response";
+        return result;
     }
 #ifdef PIWIK_SERVER_IS_IN_DEBUG_MODE
     if (!response.body.empty())
         Logger.Log(L"Response: ", response.body.c_str());
 #endif
     Logger.Debug(L"Sent HTTP request: ", qry.c_str());
-    return true;
+    result.state = PiwikDeliveryState::Succeeded;
+    return result;
 }

@@ -26,11 +26,15 @@ int main()
     // Exercise the installed chrono API without contacting any server.
     client.SetDryRun(true);
     client.SetDispatchInterval(3600);
+    if (client.RequestResult(0).state != PiwikDeliveryState::Unknown) return 17;
     PiwikActionDimensions context;
     context.Set(1, _T("success"));
     if (client.TrackDuration(_T("/startup"), _T("Startup"), _T("ready_ms"),
         std::chrono::microseconds(1250), context) <= 0) return 13;
     if (client.FlushAndWait(std::chrono::seconds(3)) != PiwikFlushResult::Success) return 14;
+    const auto delivered = client.RequestResult(1);
+    if (delivered.state != PiwikDeliveryState::Succeeded || !delivered.dryRun ||
+        delivered.httpStatus != 0 || delivered.errorCode != ERROR_SUCCESS) return 18;
     if (client.Shutdown(PiwikShutdownMode::Drain) != PiwikFlushResult::Success) return 15;
     if (client.Shutdown(PiwikShutdownMode::DiscardPending) != PiwikFlushResult::Success) return 16;
     return client.CurrentSiteId() == 7 && client.UsesSecureConnection() &&

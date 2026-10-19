@@ -83,6 +83,43 @@ Network tests use the internal `piwik::detail::IHttpTransport` interface and an 
 
 The Windows session is opened lazily on the first real send; session/connection/request handles are owned by the transport. HTTP-status-based success classification and no-retry behavior are retained. Shutdown now cooperatively joins the worker, as described below. Certificate validation defaults to enabled, with an explicit per-client opt-out. Queue/status accesses and terminal shutdown state are synchronized. GET/bulk query encoding and bulk JSON construction have regression coverage. Retry logic, interpretation of partial failures in server bulk responses, and broader configuration thread-safety changes remain separate increments.
 
+### Inspect delivery results
+
+`RequestResult(id)` returns a thread-safe, nonblocking `PiwikRequestResult` copy:
+
+| Field | Meaning |
+| --- | --- |
+| `state` | `PiwikDeliveryState::Unknown`, `Pending`, `Succeeded`, `Failed`, or `Discarded` |
+| `httpStatus` | HTTP response status, or zero when unavailable |
+| `errorCode` | WinHTTP/Windows transport error, or `ERROR_SUCCESS` when none was reported |
+| `message` | Wide-string diagnostic; use state/codes for program logic |
+| `dryRun` | True when the request completed in dry-run mode without being sent |
+
+```cpp
+const auto result = tracker.RequestResult(id);
+if (result.state == PiwikDeliveryState::Failed) {
+    // Inspect result.httpStatus and result.errorCode; display result.message.
+}
+```
+
+Unknown IDs include zero (tracking returned no queued request), negative IDs,
+and IDs not yet issued by this client. Queued and in-flight requests are pending.
+HTTP 2xx counts as success unless the transport reports an error. For example,
+HTTP 500 is `Failed` with `httpStatus == 500` and usually `errorCode == 0`;
+a timeout is `Failed` with `errorCode == ERROR_WINHTTP_TIMEOUT` (12002).
+`DiscardPending` marks queued requests `Discarded`; an in-flight send cancelled
+by the transport is `Failed` with `ERROR_OPERATION_ABORTED` (995).
+
+Results remain queryable after shutdown and are retained until client destruction,
+so storage grows with completed requests. Every ID in a POST batch receives the
+same HTTP result; this does not prove individual Matomo ingestion. No retries or
+response-body parsing are added. Diagnostics contain SDK/transport messages, not
+server response bodies. Dry runs retain legacy success behavior with `dryRun == true`.
+`RequestStatus` retains its existing integer behavior (including legacy handling
+of invalid IDs); use the new method to identify unknown IDs. Rebuild headers and
+the static library together. These delivery errors are separate from application
+error codes sent as tracking events/dimensions.
+
 Timing dependencies can be injected separately when session/retry behavior is tested. Numeric event handling now distinguishes explicit zero from a missing value while retaining the legacy convenience method's zero-as-absent behavior. Custom dimension values use URL encoding in both GET and bulk requests.
 
 GitHub Actions builds and tests x86/x64 Debug/Release using the VS2019 v142 toolset. CMake presets replace the old checked-in Visual Studio 2010 project files as the maintained build entry point. The historical Windows GUI sample source remains for reference.

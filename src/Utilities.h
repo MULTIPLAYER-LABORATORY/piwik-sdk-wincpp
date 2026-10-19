@@ -71,6 +71,25 @@ enum class PiwikShutdownMode
     DiscardPending
 };
 
+enum class PiwikDeliveryState
+{
+    Unknown,
+    Pending,
+    Succeeded,
+    Failed,
+    Discarded
+};
+
+// Snapshot retained until the owning client/dispatcher is destroyed.
+struct PiwikRequestResult
+{
+    PiwikDeliveryState state = PiwikDeliveryState::Unknown;
+    unsigned int httpStatus = 0;
+    DWORD errorCode = ERROR_SUCCESS;
+    std::wstring message;
+    bool dryRun = false;
+};
+
 enum PiwikLogLevel
 {
 	PIWIK_LOG_DEBUG,

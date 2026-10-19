@@ -507,6 +507,11 @@ PiwikFlushResult PiwikClient::Shutdown (PiwikShutdownMode mode)
 	return Dispatcher.Shutdown(mode);
 }
 
+PiwikRequestResult PiwikClient::RequestResult (int rqst)
+{
+	return Dispatcher.RequestResult(rqst);
+}
+
 // RequestStatus will return a code describing the outcome of a previous request as follows:
 // - positive if the request was successfully acknowledged by the server
 // - negative if the request failed

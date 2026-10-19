@@ -97,6 +97,126 @@ protected:
     std::unique_ptr<PiwikDispatcher> dispatcher;
 };
 
+TEST_F(DispatcherTest, ResultsDistinguishInvalidQueuedAndInflightIdsAndReturnSnapshots)
+{
+    EXPECT_EQ(PiwikDeliveryState::Unknown, dispatcher->RequestResult(0).state);
+    EXPECT_EQ(PiwikDeliveryState::Unknown, dispatcher->RequestResult(-1).state);
+    EXPECT_EQ(PiwikDeliveryState::Unknown, dispatcher->RequestResult(1).state);
+    auto gate = std::make_shared<SendGate>();
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Invoke([gate](const HttpRequest&) { return gate->Send(); }));
+    auto state = Event();
+    const int id = dispatcher->Submit(state);
+    const auto queued = dispatcher->RequestResult(id);
+    EXPECT_EQ(PiwikDeliveryState::Pending, queued.state);
+    EXPECT_EQ(0u, queued.httpStatus);
+    EXPECT_EQ(ERROR_SUCCESS, queued.errorCode);
+    EXPECT_TRUE(queued.message.empty());
+    EXPECT_FALSE(queued.dryRun);
+    ASSERT_TRUE(dispatcher->Flush());
+    ReleaseSend release{gate};
+    ASSERT_TRUE(gate->WaitEntered());
+    EXPECT_EQ(PiwikDeliveryState::Pending, dispatcher->RequestResult(id).state);
+    gate->Open();
+    ASSERT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    auto completed = dispatcher->RequestResult(id);
+    EXPECT_EQ(PiwikDeliveryState::Succeeded, completed.state);
+    EXPECT_EQ(204u, completed.httpStatus);
+    EXPECT_EQ(ERROR_SUCCESS, completed.errorCode);
+    EXPECT_TRUE(completed.message.empty());
+    EXPECT_FALSE(completed.dryRun);
+    completed.message = L"caller mutation";
+    EXPECT_TRUE(dispatcher->RequestResult(id).message.empty());
+    EXPECT_EQ(PiwikDeliveryState::Pending, queued.state);
+    EXPECT_EQ(PiwikDeliveryState::Unknown, dispatcher->RequestResult(id + 1).state);
+}
+
+TEST_F(DispatcherTest, HttpFailureIsRetainedForEveryBulkIdAfterLaterSuccess)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_POST);
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(500)));
+    auto state = Event();
+    const int first = dispatcher->Submit(state);
+    const int second = dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(Status(204)));
+    const int later = dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    for (int id : {first, second})
+    {
+        const auto result = dispatcher->RequestResult(id);
+        EXPECT_EQ(PiwikDeliveryState::Failed, result.state);
+        EXPECT_EQ(500u, result.httpStatus);
+        EXPECT_EQ(ERROR_SUCCESS, result.errorCode);
+        EXPECT_EQ(L"Unexpected HTTP response", result.message);
+        EXPECT_EQ(-1, dispatcher->RequestStatus(id));
+    }
+    EXPECT_EQ(PiwikDeliveryState::Succeeded, dispatcher->RequestResult(later).state);
+    EXPECT_EQ(1, dispatcher->RequestStatus(later));
+}
+
+TEST_F(DispatcherTest, TransportErrorsPreserveCodesAndMessagesWithoutRetry)
+{
+    dispatcher->SetRequestMethod(PIWIK_METHOD_GET);
+    for (DWORD error : {ERROR_WINHTTP_TIMEOUT, ERROR_WINHTTP_SECURE_FAILURE, ERROR_WINHTTP_CANNOT_CONNECT})
+    {
+        HttpResponse response;
+        response.errorCode = error;
+        response.errorMessage = L"Transport diagnostic";
+        EXPECT_CALL(*transport, Send(_)).WillOnce(Return(response));
+        auto state = Event();
+        const int id = dispatcher->Submit(state);
+        ASSERT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+        const auto result = dispatcher->RequestResult(id);
+        EXPECT_EQ(PiwikDeliveryState::Failed, result.state);
+        EXPECT_EQ(0u, result.httpStatus);
+        EXPECT_EQ(error, result.errorCode);
+        EXPECT_EQ(response.errorMessage, result.message);
+    }
+}
+
+TEST_F(DispatcherTest, TransportCodeWithoutMessageGetsFallbackAndPreservesHttpStatus)
+{
+    auto response = Status(200);
+    response.errorCode = ERROR_OPERATION_ABORTED;
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(response));
+    auto state = Event();
+    const int id = dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    const auto result = dispatcher->RequestResult(id);
+    EXPECT_EQ(PiwikDeliveryState::Failed, result.state);
+    EXPECT_EQ(200u, result.httpStatus);
+    EXPECT_EQ(ERROR_OPERATION_ABORTED, result.errorCode);
+    EXPECT_EQ(L"HTTP transport failed", result.message);
+}
+
+TEST_F(DispatcherTest, TransportMessageAloneStillIndicatesFailure)
+{
+    auto response = Status(204);
+    response.errorMessage = L"Transport reported failure";
+    EXPECT_CALL(*transport, Send(_)).WillOnce(Return(response));
+    auto state = Event();
+    const int id = dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Failed, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    EXPECT_EQ(PiwikDeliveryState::Failed, dispatcher->RequestResult(id).state);
+    EXPECT_EQ(response.errorMessage, dispatcher->RequestResult(id).message);
+}
+
+TEST_F(DispatcherTest, DryRunResultsExplicitlyIndicateNoNetworkDelivery)
+{
+    EXPECT_CALL(*transport, Send(_)).Times(0);
+    dispatcher->SetDryRun(true);
+    auto state = Event();
+    const int id = dispatcher->Submit(state);
+    ASSERT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    const auto result = dispatcher->RequestResult(id);
+    EXPECT_EQ(PiwikDeliveryState::Succeeded, result.state);
+    EXPECT_TRUE(result.dryRun);
+    EXPECT_EQ(0u, result.httpStatus);
+    EXPECT_EQ(ERROR_SUCCESS, result.errorCode);
+    EXPECT_FALSE(result.message.empty());
+    EXPECT_EQ(1, dispatcher->RequestStatus(id));
+}
+
 TEST_F(DispatcherTest, GetRequestContainsEncodedQueryAndNoBody)
 {
     HttpRequest captured;
@@ -400,6 +520,14 @@ TEST_F(DispatcherTest, ShutdownDiscardMarksQueuedRequestsFailedWithoutSending)
     EXPECT_EQ(-1, dispatcher->RequestStatus(first));
     EXPECT_EQ(-1, dispatcher->RequestStatus(second));
     EXPECT_EQ(0, dispatcher->Submit(state));
+    for (int id : {first, second})
+    {
+        const auto result = dispatcher->RequestResult(id);
+        EXPECT_EQ(PiwikDeliveryState::Discarded, result.state);
+        EXPECT_EQ(0u, result.httpStatus);
+        EXPECT_EQ(ERROR_SUCCESS, result.errorCode);
+        EXPECT_FALSE(result.message.empty());
+    }
     EXPECT_EQ(PiwikFlushResult::Failed, dispatcher->Shutdown(PiwikShutdownMode::Drain));
 }
 
@@ -503,6 +631,9 @@ TEST_F(DispatcherTest, ShutdownDiscardJoinsInflightBeforeReturningAndNotifiesFlu
     EXPECT_EQ(PiwikFlushResult::Failed, stop.get());
     EXPECT_EQ(PiwikFlushResult::Failed, flush.get());
     EXPECT_EQ(-1, dispatcher->RequestStatus(active));
+    EXPECT_EQ(PiwikDeliveryState::Failed, dispatcher->RequestResult(active).state);
+    EXPECT_EQ(ERROR_OPERATION_ABORTED, dispatcher->RequestResult(active).errorCode);
+    EXPECT_EQ(PiwikDeliveryState::Discarded, dispatcher->RequestResult(queued).state);
 }
 
 TEST_F(DispatcherTest, ConnectionTimeoutUsesFiniteValidatedSecondsForEachSend)
