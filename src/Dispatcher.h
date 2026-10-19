@@ -61,6 +61,7 @@ private:
 
 	std::deque<Request> Requests;
 	std::vector<int> Failures;
+	std::map<int, PiwikRequestResult> Results;
 	int SerialNumber;
 	int LastAcknowledged;
 	int LastCompleted;
@@ -97,10 +98,11 @@ public:
 	PiwikFlushResult FlushAndWait (std::chrono::milliseconds timeout);
 	PiwikFlushResult Shutdown (PiwikShutdownMode mode = PiwikShutdownMode::Drain);
 	int  RequestStatus (int rqst);
+	PiwikRequestResult RequestResult (int rqst);
 
 private:
 	bool LaunchService ();
 	static unsigned __stdcall ServiceRoutine (void*);
-	bool SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
+	PiwikRequestResult SendRequest (wstring& host, wstring& path, PiwikMethod mth, string& qry);
 };
 

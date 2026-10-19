@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Structured delivery results
+
+- Add `RequestResult(id)` snapshots with delivery state, HTTP status, transport
+  error code/message, and an explicit dry-run flag. Distinguish discarded queued
+  requests from failed sends; preserve `RequestStatus` and cumulative flush results.
+- Retain results for the client's lifetime, including each ID in a bulk request.
+  Unknown IDs are explicit. Rebuild headers and library together.
+
 ### Cooperative shutdown and finite HTTP phase timeouts
 
 - Add terminal `Shutdown(Drain | DiscardPending)`, defaulting to drain in the
