@@ -57,7 +57,14 @@ void PiwikClient::SetUserId (LPCTSTR p)
 	State.VisitorId = MakeHexDigest (State.UserId, PIWIK_DIGEST_LENGTH);
 }
 
-TSTRING PiwikClient::CurrentApiUrl ()  
+void PiwikClient::SetVisitorId (LPCTSTR p)
+{
+	PiwikScopedLock lck (Mutex);
+	TSTRING key = p ? p : _T("");
+	State.VisitorId = key.empty() ? TSTRING() : MakeHexDigest(key, PIWIK_DIGEST_LENGTH);
+}
+
+TSTRING PiwikClient::CurrentApiUrl ()
 {
 	return Dispatcher.CurrentApiUrl ();
 }
@@ -332,7 +339,7 @@ void PiwikClient::SetVisitDimensions (int nDimensionNum, ...)
         LPCTSTR strName  = va_arg(DimensionList, LPCTSTR);
         LPCTSTR strValue = va_arg(DimensionList, LPCTSTR);
 
-        State.VistDimensionVariables.Items[i].Set(strName, strValue);
+        State.VistDimensionVariables.Items[i].Set(strName, strValue ? strValue : _T(""));
     }
 
     va_end(DimensionList);
@@ -357,7 +364,7 @@ int PiwikClient::TrackAction( LPCTSTR path, LPCTSTR act, int amountOfTime, int n
         LPCTSTR strName  = va_arg(DimensionList, LPCTSTR);
         LPCTSTR strValue = va_arg(DimensionList, LPCTSTR);
 
-        st.DimensionVariables.Items[i].Set (strName, strValue);
+        st.DimensionVariables.Items[i].Set (strName, strValue ? strValue : _T(""));
     }
 
     va_end(DimensionList);

@@ -21,6 +21,49 @@ TEST(Client, ConfigurationWorksWithoutSendingRequests)
     EXPECT_EQ(12, client.CurrentSiteId());
 }
 
+TEST(Client, ApplicationVisitorKeyPreservesIndependentMachineIdentity)
+{
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDryRun(true);
+    client.SetDispatchInterval(3600);
+    client.SetUserId(_T("license-user"));
+    client.SetVisitorId(_T("machine-123"));
+    PiwikState state;
+    state.TrackedPath = _T("/event");
+    ASSERT_GT(client.Track(state), 0);
+    EXPECT_EQ(_T("license-user"), state.UserId);
+    EXPECT_EQ(_T("5CF8708457FB0F53"), state.VisitorId);
+    client.SetUserId(_T("other-user"));
+    client.SetVisitorId(_T("machine-123"));
+    ASSERT_GT(client.Track(state), 0);
+    EXPECT_EQ(_T("other-user"), state.UserId);
+    EXPECT_EQ(_T("5CF8708457FB0F53"), state.VisitorId);
+    client.SetVisitorId(nullptr);
+    ASSERT_GT(client.Track(state), 0);
+    EXPECT_TRUE(state.VisitorId.empty());
+    client.SetVisitorId(_T("machine-123"));
+    client.SetVisitorId(_T(""));
+    ASSERT_GT(client.Track(state), 0);
+    EXPECT_TRUE(state.VisitorId.empty());
+}
+
+TEST(Client, NullLegacyDimensionValuesAreOmittedWithoutCrashing)
+{
+    std::wostringstream log;
+    PiwikClient client(_T("https://example.invalid/piwik.php"), 7);
+    client.SetDryRun(true);
+    client.SetDispatchInterval(3600);
+    client.SetLogger(&log, PIWIK_LOG_DEBUG);
+    client.SetVisitDimensions(2, _T("dimension14"), static_cast<LPCTSTR>(nullptr),
+        _T("dimension15"), _T("version"));
+    ASSERT_GT(client.TrackAction(_T("/event"), _T("Install"), 0, 2,
+        _T("dimension1"), static_cast<LPCTSTR>(nullptr), _T("dimension2"), _T("app")), 0);
+    EXPECT_EQ(std::wstring::npos, log.str().find(L"&dimension14="));
+    EXPECT_EQ(std::wstring::npos, log.str().find(L"&dimension1="));
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension15=version"));
+    EXPECT_NE(std::wstring::npos, log.str().find(L"&dimension2=app"));
+}
+
 TEST(Client, CertificatePolicyIsIndependentForEachClient)
 {
     PiwikClient first(_T("https://example.invalid/piwik.php"), 7);
