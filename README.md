@@ -2,6 +2,30 @@
 
 ## Piwik C++ tracking SDK for Windows Desktop
 
+### Motivation
+
+Application teams need to understand which features people use, how long
+operations take, and which errors occur in released versions. Commercial
+services such as [Mixpanel](https://mixpanel.com/) and
+[Amplitude](https://www.amplitude.com/docs/analytics/product-analytics) address
+product usage and event analytics.
+
+This SDK brings native Windows C++ applications to
+[Matomo](https://matomo.org/), providing an application-independent way to send
+usage events, explicitly measured operation durations, and application error
+codes. With a self-hosted Matomo server, teams can keep analytics on infrastructure
+they control and choose their own event vocabulary. The SDK collects and delivers
+the application's telemetry; Matomo supplies storage and reporting. Self-hosting
+still requires server capacity and maintenance.
+
+Dedicated tools such as [BugSplat](https://www.bugsplat.com/features/) provide
+deeper crash diagnostics. This SDK plus Matomo offers basic application analytics
+and monitoring, with overlapping use cases rather than feature parity: it does
+not currently capture crash dumps, symbolicate stack traces, or automatically
+profile CPU and memory. See the
+[application event mapping guide](doc/application-event-mapping.md) for a suggested
+schema covering usage, performance measurements, and error codes.
+
 ### Design
 
 This SDK makes possible for a Windows Desktop application to access a Piwik web server in order to track GUI events and generate statistical data about its usage. All kind of events can be tracked as standardly supported by the Piwik API, although some of them must be interpreted somehow differently in the context of a desktop application.
