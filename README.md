@@ -140,6 +140,10 @@ Direct entry points are provided to the hosting application to track standard ta
 
 To get a detailed insight into the interface of the library take a look at the [Reference Documentation](doc/Reference.md).
 
+For an optional vocabulary and C++14 examples covering lifecycle events,
+operation outcomes, performance measurements, and application error codes, see
+[Mapping application activity to Matomo events](doc/application-event-mapping.md).
+
 ### Server certificate validation
 
 HTTPS server certificate validation is enabled by default. This changes the old

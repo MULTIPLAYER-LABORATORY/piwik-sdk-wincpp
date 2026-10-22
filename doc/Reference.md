@@ -2,6 +2,9 @@
 
 ## Reference Documentation
 
+See [Mapping application activity to Matomo events](application-event-mapping.md)
+for an optional application schema and complete C++14 example.
+
 These are the entry points provided by the Piwik tracking library:
 
 1. Construction:
