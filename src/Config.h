@@ -27,7 +27,7 @@
 #define PIWIK_CONNECTION_TIMEOUT   5          // sec while trying to establish a connection
 #define PIWIK_DISPATCH_INTERVAL    (2 * 60)   // sec between API requests
 #define PIWIK_SHUTDOWN_WAIT        10         // legacy constant; cooperative shutdown has no forced-kill deadline
-#define PIWIK_POST_BUNDLE          50         // number of queries sent together in one POST request
+#define PIWIK_POST_BUNDLE          100        // maximum queries sent together in one POST request
 #define PIWIK_RECORDING_VALUE      1          // rec parameter value
 #define PIWIK_SEND_IMAGE           0          // send_image parameter value
 

@@ -758,19 +758,21 @@ TEST_F(DispatcherTest, FailedBatchMarksEveryEventFailed)
 TEST_F(DispatcherTest, PostBatchesRespectConfiguredBundleLimit)
 {
     std::vector<HttpRequest> captured;
-    EXPECT_CALL(*transport, Send(_)).Times(2).WillRepeatedly(Invoke([&](const HttpRequest& request) {
+    EXPECT_CALL(*transport, Send(_)).Times(3).WillRepeatedly(Invoke([&](const HttpRequest& request) {
         captured.push_back(request);
         return Status(200);
     }));
     auto state = Event();
     int last = 0;
-    for (int i = 0; i < PIWIK_POST_BUNDLE + 1; ++i)
+    for (int i = 0; i < 2 * PIWIK_POST_BUNDLE + 1; ++i)
         last = dispatcher->Submit(state);
-    ASSERT_TRUE(dispatcher->Flush());
-    ExpectStatus(last, 1);
-    ASSERT_EQ(2u, captured.size());
+    ASSERT_EQ(PiwikFlushResult::Success, dispatcher->FlushAndWait(std::chrono::seconds(3)));
+    for (int id = 1; id <= last; ++id)
+        EXPECT_EQ(1, dispatcher->RequestStatus(id));
+    ASSERT_EQ(3u, captured.size());
     EXPECT_EQ(PIWIK_POST_BUNDLE, std::count(captured[0].body.begin(), captured[0].body.end(), '?'));
-    EXPECT_EQ(1, std::count(captured[1].body.begin(), captured[1].body.end(), '?'));
+    EXPECT_EQ(PIWIK_POST_BUNDLE, std::count(captured[1].body.begin(), captured[1].body.end(), '?'));
+    EXPECT_EQ(1, std::count(captured[2].body.begin(), captured[2].body.end(), '?'));
 }
 
 TEST_F(DispatcherTest, LaterSuccessDoesNotHideEarlierFailure)

@@ -216,9 +216,14 @@ client destructor; cooperative shutdown below owns the final join. Keep the
 client alive while calls are active and do not destroy it concurrently with
 tracking or waiting. Rebuild headers and the static library together after dispatcher changes.
 
-POST batches retain the existing size limit and now stop at GET/endpoint
-transitions, ensuring that every submitted request is actually sent to its
-captured host/path before being marked complete.
+POST batches contain up to 100 events and stop at GET/endpoint transitions or
+active flush boundaries, ensuring that every submitted request is actually sent
+to its captured host/path before being marked complete. Smaller batches are sent
+when fewer events are queued; filling a batch does not itself trigger dispatch.
+This limit reduces HTTP overhead when a backlog exists, but is not a throughput
+guarantee or a bound on queue/result storage. The dispatch interval is unchanged.
+Rebuild the static library to adopt the new limit; changing an application's copy
+of the header alone does not change an already-built SDK.
 
 ### Cooperative shutdown
 
