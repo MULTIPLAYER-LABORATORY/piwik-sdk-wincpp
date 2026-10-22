@@ -46,6 +46,9 @@ public:
 	void SetSiteId (int id);
 	TSTRING CurrentUserId ();
 	void SetUserId (LPCTSTR p);
+	// Hash an application visitor key. Call after SetUserId to override its
+	// derived visitor ID; null/empty clears the visitor ID.
+	void SetVisitorId (LPCTSTR p);
 	TSTRING CurrentApiUrl ();
 	bool SetApiUrl (LPCTSTR p);
 	int  CurrentRequestMethod ();

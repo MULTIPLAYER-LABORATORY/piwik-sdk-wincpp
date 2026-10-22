@@ -85,6 +85,14 @@ The Windows session is opened lazily on the first real send; session/connection/
 
 ### Inspect delivery results
 
+For a machine identity separate from the user identity, call
+`SetVisitorId(machineKey)` after `SetUserId(userKey)`. This hashes the key using
+the existing digest algorithm into a 16-character hexadecimal visitor ID.
+It does not accept a raw Matomo visitor ID. Null/empty clears it. `SetUserId`
+retains its legacy visitor derivation, so reapply the machine key after changing
+the user ID. Legacy variadic action/visit dimensions accept null values as empty
+(omitted), preserving existing application callers.
+
 `RequestResult(id)` returns a thread-safe, nonblocking `PiwikRequestResult` copy:
 
 | Field | Meaning |

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Application integration compatibility
+
+- Add `SetVisitorId` for a hashed application visitor key independent of the user
+  when applied after `SetUserId`; null/empty clears it. Preserve existing hashing.
+- Handle null values in legacy action/visit dimensions as empty (omitted), with
+  regression tests and installed static-library consumer coverage.
+
 ### Structured delivery results
 
 - Add `RequestResult(id)` snapshots with delivery state, HTTP status, transport

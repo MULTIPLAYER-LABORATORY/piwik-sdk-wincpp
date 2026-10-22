@@ -26,6 +26,8 @@ int main()
     // Exercise the installed chrono API without contacting any server.
     client.SetDryRun(true);
     client.SetDispatchInterval(3600);
+    client.SetUserId(_T("license-user"));
+    client.SetVisitorId(_T("machine-123"));
     if (client.RequestResult(0).state != PiwikDeliveryState::Unknown) return 17;
     PiwikActionDimensions context;
     context.Set(1, _T("success"));
