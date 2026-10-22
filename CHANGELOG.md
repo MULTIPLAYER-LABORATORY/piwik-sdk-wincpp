@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### POST batch size
+
+- Increase the maximum POST batch from 50 to 100 events. Preserve smaller batches,
+  GET/endpoint/flush boundaries, and existing dispatch timing. Rebuild the SDK to
+  adopt the limit. This does not add queue limits or establish a throughput guarantee.
+- Exercise two full batches plus a remainder and verify every request completes.
+
 ### Application integration compatibility
 
 - Add `SetVisitorId` for a hashed application visitor key independent of the user
