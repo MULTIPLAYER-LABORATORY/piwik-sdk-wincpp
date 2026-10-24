@@ -28,13 +28,13 @@ foreach ($line in $devEnvironment) {
         }
     }
 }
-# Prefer a supported CMake on PATH; older VS2019 bundles predate schema v3.
+# Preset schema v2 supports the CMake 3.20 bundled with VS2019.
 $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
 $cmakeTooOld = $true
 if ($cmakeCommand) {
     $cmakeVersionLine = & $cmakeCommand.Source --version | Select-Object -First 1
     if ($cmakeVersionLine -match 'cmake version (\d+\.\d+\.\d+)') {
-        $cmakeTooOld = [version]$Matches[1] -lt [version]'3.21.0'
+        $cmakeTooOld = [version]$Matches[1] -lt [version]'3.20.0'
     }
 }
 if ($cmakeTooOld -or

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### VS2019 bundled CMake compatibility
+
+- Lower the build minimum to CMake 3.20 and use preset schema v2, compatible with
+  VS2019's bundled CMake. Keep Ninja, C++14, and x86/x64 configurations.
+- Align the build helper and installed-package verification with that minimum.
+
 ### POST batch size
 
 - Increase the maximum POST batch from 50 to 100 events. Preserve smaller batches,

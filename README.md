@@ -30,7 +30,7 @@ schema covering usage, performance measurements, and error codes.
 
 This SDK makes possible for a Windows Desktop application to access a Piwik web server in order to track GUI events and generate statistical data about its usage. All kind of events can be tracked as standardly supported by the Piwik API, although some of them must be interpreted somehow differently in the context of a desktop application.
 
-The SDK is an application-independent native Windows C++ library for Matomo (formerly Piwik). The supported build baseline is Visual Studio 2019 or newer, C++14, CMake 3.21 or newer, and Ninja. Windows XP is no longer supported. The default Windows API target is Windows 7 (`0x0601`); this is an API baseline, not certification on older operating systems. Runtime validation currently targets the Windows versions used by CI and local development.
+The SDK is an application-independent native Windows C++ library for Matomo (formerly Piwik). The supported build baseline is Visual Studio 2019 or newer, C++14, CMake 3.20 or newer, and Ninja. Windows XP is no longer supported. The default Windows API target is Windows 7 (`0x0601`); this is an API baseline, not certification on older operating systems. Runtime validation currently targets the Windows versions used by CI and local development.
 
 The production library depends only on the C++ runtime and Windows system libraries. GoogleTest/gMock is downloaded only when tests are enabled.
 
@@ -59,7 +59,7 @@ Alternatively, from an ordinary PowerShell terminal, the helper locates Visual S
 .\tools\build.ps1 -Action Install          # install previously built x86 Debug
 ```
 
-For Visual Studio 2022, pass `-VisualStudioVersion '[17.0,18.0)'`. The helper uses CMake/Ninja from PATH or a Visual Studio installation. CMake must be at least 3.21. Presets do not select the compiler version themselves: it is supplied by the developer environment or helper. The external architecture hint is for IDEs; command-line builds validate the actual compiler architecture and fail if it does not match the preset.
+For Visual Studio 2022, pass `-VisualStudioVersion '[17.0,18.0)'`. The helper uses CMake/Ninja from PATH or a Visual Studio installation. CMake must be at least 3.20. Presets do not select the compiler version themselves: it is supplied by the developer environment or helper. The external architecture hint is for IDEs; command-line builds validate the actual compiler architecture and fail if it does not match the preset.
 
 Available configure/build/test presets are `windows-x86-debug`, `windows-x86-release`, `windows-x64-debug`, and `windows-x64-release`. Build trees are isolated under `out/build`, and packages install under `out/install`. Do not share a build tree across compiler versions or runtime choices.
 

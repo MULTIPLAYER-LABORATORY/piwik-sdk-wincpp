@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.20)
 project(MatomoPackageConsumer LANGUAGES CXX)
 find_package(MatomoSDK CONFIG REQUIRED)
 add_executable(package_consumer main.cpp)

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.20)
 project(PiwikClient VERSION 1.1.0 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT MSVC OR MSVC_VERSION LESS 1920)

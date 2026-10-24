@@ -1,6 +1,6 @@
 # Run with cmake -DSDK_BUILD_DIR=<absolute build directory> -P verify.cmake
 # from the same MSVC developer environment used for the SDK build.
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.20)
 if(NOT DEFINED SDK_BUILD_DIR)
     message(FATAL_ERROR "SDK_BUILD_DIR is required")
 endif()
